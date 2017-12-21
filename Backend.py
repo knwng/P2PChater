@@ -4,17 +4,19 @@ from config import *
 
 
 class Comm2Server(object):
-    def __init__(self, dst_ip, dst_port, account):
+    def __init__(self, dst_ip, dst_port, account, passwd='net2017'):
         # self.dst_ip = dst_ip
         # self.dst_port = dst_port
         self.address = (dst_ip, dst_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.account = account
+        self.passwd = passwd
         self.sock.connect(self.address)
+        self.friend_list = {}
         print('Socket name: ', self.sock.getsockname())
 
     def login(self):
-        self.sock.sendall(self.account+'_net2017')
+        self.sock.sendall('{}_{}'.format(self.account, self.passwd))
         reply = self.sock.recv(BUFFERSIZE)
         # print('reply: ', reply)
         # self.sock.close()
@@ -37,6 +39,20 @@ class Comm2Server(object):
         if reply == 'n':
             return None
         return reply
+
+    def get_friend_status(self):
+        with file(friend_list_fn, 'r') as f:
+            flt = f.readlines()
+        for i in flt:
+            self.friend_list[i] = self.query(i)
+
+    def chat(self, friend):
+        if friend not in self.friend_list.keys():
+            return None
+        if self.friend_list[friend] is None:
+            return None
+
+        return CommP2P(self.friend_list[friend], 8000)
 
 
 class CommP2P(object):
