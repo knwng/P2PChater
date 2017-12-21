@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
+from Backend import *
+from config import *
+import time
+
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.properties import ObjectProperty
 from kivy.uix.image import Image
+from kivy.uix.widget import Widget
 
 from kivymd.bottomsheet import MDListBottomSheet, MDGridBottomSheet
 from kivymd.button import MDIconButton
@@ -59,12 +64,13 @@ ScreenManager:
     Screen:
         name: 'login'
         ScrollView:
-            BoxLayout:
-                orientation: 'vertical'
-                size_hint_y: None
-                height: self.minimum_height
+            FloatLayout:
+                # orientation: 'vertical'
+                # size_hint_y: None
+                # height: self.minimum_height
                 # width: self.minimum_width
-                padding: dp(48)
+                # padding: dp(48)
+                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
                 spacing: 20
                 MDTextField:
                     id: username
@@ -73,7 +79,8 @@ ScreenManager:
                     color_mode: 'accent'
                     helper_text: "Student ID"
                     helper_text_mode: "on_focus"
-                    pos_hint: {'center_x': 0.5, 'center_y': 0.3}
+                    pos_hint: {'center_x': 0.5, 'center_y': 0.7}
+                    size_hint: 0.5, 0.1
                 MDTextField:
                     id: password
                     hint_text: "Password"
@@ -82,32 +89,55 @@ ScreenManager:
                     helper_text: "net2017"
                     password: True
                     helper_text_mode: "on_focus"
-                    pos_hint: {'center_x': 0.5, 'center_y': 0.6}
+                    pos_hint: {'center_x': 0.5, 'center_y': 0.55}
+                    size_hint: 0.5, 0.1
                 MDRaisedButton:
                     text: "Login"
-                    pos_hint:{'left': 0, 'center_y': 0.9}
+                    pos_hint:{'right': 0.35, 'center_y': 0.45}
                     on_release: app.get_username_passwd()
-                # BoxLayout:
-                #     orientation: 'horizontal'
-                #     pos_hint: {'center_x': 0.5, 'center_y': 0.7}
-                #     MDRaisedButton:
-                #         text: "Login"
-                #         pos_hint:{'left': 0, 'center_y': 0.5}
-                #     BoxLayout:
-                #         pos_hint: {'right': 1, 'center_y': 0.5}
-                #         orientation: 'horizontal'
-                #         spacing: 5
-                #         width: self.minimum_width
-                #         MDCheckbox:
-                #             id: remember_passwd
-                #         MDLabel:
-                #             font_style: 'Body1'
-                #             theme_text_color: 'Custom'
-                #             text_color: (0,1,0,.4)
-                #             text: "Remember Password"
-                #             # size_hint_x:None
-                            
+                    size_hint: 0.1, 0.05
+    Screen:
+        name: 'mainpage'
+        MDBottomNavigation:
+            id: main_navigation
+            MDBottomNavigationItem:
+                name: 'Chat'
+                text: "Warning"
+                icon: "alert-octagon"
+                MDLabel:
+                    font_style: 'Body1'
+                    theme_text_color: 'Primary'
+                    text: "Warning!"
+                    halign: 'center'
+            MDBottomNavigationItem:
+                name: 'Moment'
+                text: "Bank"
+                icon: 'bank'
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    padding: dp(48)
+                    spacing: 10
+                    MDTextField:
+                        hint_text: "You can put any widgets here"
+                        helper_text: "Hello :)"
+                        helper_text_mode: "on_focus"   
+            MDBottomNavigationItem:
+                name: 'profile'
+                text: "Hello"
+                icon: 'alert'
+                id: profile
+                BoxLayout:
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    padding: dp(48)
+                    spacing: 10
+                    MDTextField:
+                        hint_text: "Hello again"                         
 '''
+
+class NameCard(Widget):
+    pass
 
 
 class HackedDemoNavDrawer(MDNavigationDrawer):
@@ -155,15 +185,17 @@ class KitchenSink(App):
         # main_widget.ids.text_field_error.bind(
         #     on_text_validate=self.set_error_message,
         #     on_focus=self.set_error_message)
-        self.bottom_navigation_remove_mobile(main_widget)
+        # self.bottom_navigation_remove_mobile(main_widget)
         return main_widget
 
+    '''
     def bottom_navigation_remove_mobile(self, widget):
         # Removes some items from bottom-navigation demo when on mobile
         if DEVICE_TYPE == 'mobile':
             widget.ids.bottom_navigation_demo.remove_widget(widget.ids.bottom_navigation_desktop_2)
         if DEVICE_TYPE == 'mobile' or DEVICE_TYPE == 'tablet':
             widget.ids.bottom_navigation_demo.remove_widget(widget.ids.bottom_navigation_desktop_1)
+    '''
 
     def show_example_snackbar(self, snack_type):
         if snack_type == 'simple':
@@ -174,8 +206,57 @@ class KitchenSink(App):
             Snackbar(text="This is a very very very very very very very long snackbar!").show()
 
     def get_username_passwd(self):
-        print('Username: {}'.format(self.root.ids.username.text))
-        print('Password: {}'.format(self.root.ids.password.text))
+        username = self.root.ids.username.text
+        password = self.root.ids.password.text
+        print('Username: {}'.format(username))
+        print('Password: {}'.format(password))
+        print('TextField Dir: {}'.format(dir(self.root.ids.username)))
+        if username == '2014010622' and password == 'net2017':
+            self.root.ids.scrmngr.current = 'mainpage'
+        else:
+            self.show_login_error_dialog()
+
+    def show_login_error_dialog(self):
+        content = MDLabel(font_style='Body1',
+                          theme_text_color='Secondary',
+                          text='Please Check your username and password',
+                          size_hint_y=None,
+                          valign='top')
+        content.bind(texture_size=content.setter('size'))
+        self.login_error_dialog = MDDialog(title="Wrong username/password!",
+                                           content=content,
+                                           size_hint=(.8, None),
+                                           height=dp(200),
+                                           auto_dismiss=False)
+        self.login_error_dialog.add_action_button("OK",
+                                                  action=lambda *x: self.login_error_dialog_dismiss())
+        self.login_error_dialog.open()
+
+    def login_error_dialog_dismiss(self):
+        self.root.ids.username.text = ''
+        self.root.ids.password.text = ''
+        self.login_error_dialog.dismiss()
+
+    def show_connection_error_dialog(self):
+        content = MDLabel(font_style='Body1',
+                          theme_text_color='Secondary',
+                          text='Please Check your Internet Connection',
+                          size_hint_y=None,
+                          valign='top')
+        content.bind(texture_size=content.setter('size'))
+        self.connection_error_dialog = MDDialog(title="Connection Failed",
+                                                content=content,
+                                                size_hint=(.8, None),
+                                                height=dp(200),
+                                                auto_dismiss=False)
+        self.connection_error_dialog.add_action_button("OD",
+                                                       action=lambda *x: self.connection_error_dialog_dismiss())
+        self.connection_error_dialog.open()
+
+    def connection_error_dialog_dismiss(self):
+        self.connection_error_dialog.dismiss()
+
+
 
 
     def show_example_dialog(self):
