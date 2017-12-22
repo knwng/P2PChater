@@ -2,11 +2,12 @@
 from Backend import *
 from config import *
 import time
+import os,sys, time
 
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.metrics import dp
-from kivy.properties import ObjectProperty
+from kivy.properties import ObjectProperty, StringProperty
 from kivy.uix.image import Image
 from kivy.uix.widget import Widget
 
@@ -17,7 +18,7 @@ from kivymd.dialog import MDDialog
 from kivymd.label import MDLabel
 from kivymd.list import ILeftBody, ILeftBodyTouch, IRightBodyTouch, BaseListItem
 from kivymd.material_resources import DEVICE_TYPE
-from kivymd.navigationdrawer import MDNavigationDrawer, NavigationDrawerHeaderBase
+from kivymd.navigationdrawer import MDNavigationDrawer, NavigationDrawerHeaderBase, NavigationDrawerIconButton
 from kivymd.selectioncontrols import MDCheckbox
 from kivymd.snackbar import Snackbar
 from kivymd.theming import ThemeManager
@@ -59,86 +60,116 @@ main_widget_kv = '''
 #:import MDBottomNavigation kivymd.tabs.MDBottomNavigation
 #:import MDBottomNavigationItem kivymd.tabs.MDBottomNavigationItem
 
-ScreenManager:
-    id: scr_mngr
-    Screen:
-        name: 'login'
-        ScrollView:
-            FloatLayout:
-                # orientation: 'vertical'
-                # size_hint_y: None
-                # height: self.minimum_height
-                # width: self.minimum_width
-                # padding: dp(48)
-                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
-                spacing: 20
-                MDTextField:
-                    id: username
-                    hint_text: "Username"
-                    required: True
-                    color_mode: 'accent'
-                    helper_text: "Student ID"
-                    helper_text_mode: "on_focus"
-                    pos_hint: {'center_x': 0.5, 'center_y': 0.7}
-                    size_hint: 0.5, 0.1
-                MDTextField:
-                    id: password
-                    hint_text: "Password"
-                    required: True
-                    color_mode: 'accent'
-                    helper_text: "net2017"
-                    password: True
-                    helper_text_mode: "on_focus"
-                    pos_hint: {'center_x': 0.5, 'center_y': 0.55}
-                    size_hint: 0.5, 0.1
-                MDRaisedButton:
-                    text: "Login"
-                    pos_hint:{'right': 0.35, 'center_y': 0.45}
-                    on_release: app.get_username_passwd()
-                    size_hint: 0.1, 0.05
-    Screen:
-        name: 'mainpage'
-        MDBottomNavigation:
-            id: main_navigation
-            MDBottomNavigationItem:
-                name: 'Chat'
-                text: "Warning"
-                icon: "alert-octagon"
-                MDLabel:
-                    font_style: 'Body1'
-                    theme_text_color: 'Primary'
-                    text: "Warning!"
-                    halign: 'center'
-            MDBottomNavigationItem:
-                name: 'Moment'
-                text: "Bank"
-                icon: 'bank'
-                BoxLayout:
-                    orientation: 'vertical'
-                    size_hint_y: None
-                    padding: dp(48)
-                    spacing: 10
+BoxLayout:
+    orientation: 'vertical'
+    ScreenManager:
+        id: scr_mngr
+        Screen:
+            name: 'login'
+            # id: login
+            ScrollView:
+                FloatLayout:
+                    # orientation: 'vertical'
+                    # size_hint_y: None
+                    # height: self.minimum_height
+                    # width: self.minimum_width
+                    # padding: dp(48)
+                    pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+                    spacing: 20
                     MDTextField:
-                        hint_text: "You can put any widgets here"
-                        helper_text: "Hello :)"
-                        helper_text_mode: "on_focus"   
-            MDBottomNavigationItem:
-                name: 'profile'
-                text: "Hello"
-                icon: 'alert'
-                id: profile
-                BoxLayout:
-                    orientation: 'vertical'
-                    size_hint_y: None
-                    padding: dp(48)
-                    spacing: 10
+                        id: username
+                        hint_text: "Username"
+                        required: True
+                        multiline: False
+                        color_mode: 'accent'
+                        helper_text: "Student ID"
+                        helper_text_mode: "on_focus"
+                        pos_hint: {'center_x': 0.5, 'center_y': 0.7}
+                        size_hint: 0.5, 0.1
                     MDTextField:
-                        hint_text: "Hello again"                         
+                        id: password
+                        hint_text: "Password"
+                        required: True
+                        multiline: False
+                        color_mode: 'accent'
+                        helper_text: "net2017"
+                        password: True
+                        helper_text_mode: "on_focus"
+                        pos_hint: {'center_x': 0.5, 'center_y': 0.55}
+                        size_hint: 0.5, 0.1
+                    MDRaisedButton:
+                        text: "Login"
+                        pos_hint:{'right': 0.35, 'center_y': 0.45}
+                        on_release: app.get_username_passwd()
+                        size_hint: 0.1, 0.05
+        Screen:
+            name: 'mainpage'
+            # id: mainpage
+            MDBottomNavigation:
+                id: main_navigation
+                MDBottomNavigationItem:
+                    name: 'Chat'
+                    text: "Chat"
+                    icon: "alert-octagon"
+                    id: chat
+                    # MDLabel:
+                    #     font_style: 'Body1'
+                    #     theme_text_color: 'Primary'
+                    #     text: "Warning!"
+                    #     halign: 'center'
+                    BoxLayout:
+                        orientation: 'vertical'
+                        HackedDemoNavDrawer:
+                            id: nav_drawer
+                            NavigationDrawerIconButton:
+                                active_color_type: 'custom'
+                                icon: 'checkbox-blank-circle'
+                                text: "Custom active color"
+                                active_color: [1, 0, 1, 1]
+                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
+                            NavigationDrawerIconButton:
+                                active_color_type: 'custom'
+                                text: "Custom active color"
+                                active_color: [1, 0, 1, 1]
+                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
+                            NavigationDrawerIconButton:
+                                active_color_type: 'custom'
+                                text: "Custom active color"
+                                active_color: [1, 0, 1, 1]
+                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
+                            NavigationDrawerIconButton:
+                                active_color_type: 'custom'
+                                text: "Custom active color"
+                                active_color: [1, 0, 1, 1]
+                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
+                            
+                            
+                            
+                MDBottomNavigationItem:
+                    name: 'Moment'
+                    text: "Moment"
+                    icon: 'bank'
+                    id: moment
+                    BoxLayout:
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        padding: dp(48)
+                        spacing: 10
+                        MDTextField:
+                            hint_text: "You can put any widgets here"
+                MDBottomNavigationItem:
+                    name: 'Profile'
+                    text: "Profile"
+                    icon: 'alert'
+                    id: profile
+                    BoxLayout:
+                        orientation: 'vertical'
+                        size_hint_y: None
+                        padding: dp(48)
+                        spacing: 10
+                        MDTextField:
+                            hint_text: "Hello again"                         
 '''
-
-class NameCard(Widget):
-    pass
-
 
 class HackedDemoNavDrawer(MDNavigationDrawer):
     # DO NOT USE
@@ -160,6 +191,10 @@ class KitchenSink(App):
     theme_cls = ThemeManager()
     previous_date = ObjectProperty()
     title = "KivyMD Kitchen Sink"
+    msg = StringProperty('')
+    login_conn = None
+    friendlist_conn = None
+    friend_list = []
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
@@ -185,17 +220,48 @@ class KitchenSink(App):
         # main_widget.ids.text_field_error.bind(
         #     on_text_validate=self.set_error_message,
         #     on_focus=self.set_error_message)
-        # self.bottom_navigation_remove_mobile(main_widget)
+        self.bottom_navigation_remove_mobile(main_widget)
+        self.host = '166.111.140.14'
+        self.connect(self.host, 8000)
+        reactor.connectTCP(self.host, 8000, LoginClientFactory(self))
+        reactor.listenTCP(12500, RequestServerFactory(self))
         return main_widget
 
-    '''
+    # Network
+    def on_login_conn(self, conn):
+        print('Connection {} setup successfully'.format(conn))
+        self.login_conn = conn
+
+    def on_friendlist_conn(self, conn):
+        self.friendlist_conn = conn
+
+    def login(self, username, password, *args):
+        print('comm2server instance: {}'.format(self.login_conn))
+        if self.login_conn:
+            print('send message to server: {}'.format('{}_{}'.format(username, password).format('utf-8')))
+            self.login_conn.write('{}_{}'.format(username, password).encode('utf-8'))
+        else:
+            print('comm2server instance not setup')
+            self.show_connection_error_dialog()
+        return
+
+    def login_callback(self, FLAG):
+        if FLAG:
+            self.root.ids.scr_mngr.current = 'mainpage'
+            reactor.connectTCP(self.host, 8000, FriendlistClientFactory(self))
+        else:
+            self.show_connection_error_dialog()
+
+    # def proc_friend_list(self, msg):
+
+
+
     def bottom_navigation_remove_mobile(self, widget):
         # Removes some items from bottom-navigation demo when on mobile
         if DEVICE_TYPE == 'mobile':
-            widget.ids.bottom_navigation_demo.remove_widget(widget.ids.bottom_navigation_desktop_2)
+            widget.ids.main_navigation.remove_widget(widget.ids.bottom_navigation_desktop_2)
         if DEVICE_TYPE == 'mobile' or DEVICE_TYPE == 'tablet':
-            widget.ids.bottom_navigation_demo.remove_widget(widget.ids.bottom_navigation_desktop_1)
-    '''
+            widget.ids.main_navigation.remove_widget(widget.ids.bottom_navigation_desktop_1)
 
     def show_example_snackbar(self, snack_type):
         if snack_type == 'simple':
@@ -210,9 +276,10 @@ class KitchenSink(App):
         password = self.root.ids.password.text
         print('Username: {}'.format(username))
         print('Password: {}'.format(password))
-        print('TextField Dir: {}'.format(dir(self.root.ids.username)))
+        # for i in self.root.ids:
+        #     print('Current Widget: {}'.format(i))
         if username == '2014010622' and password == 'net2017':
-            self.root.ids.scrmngr.current = 'mainpage'
+            self.login(username, password)
         else:
             self.show_login_error_dialog()
 
@@ -255,9 +322,6 @@ class KitchenSink(App):
 
     def connection_error_dialog_dismiss(self):
         self.connection_error_dialog.dismiss()
-
-
-
 
     def show_example_dialog(self):
         content = MDLabel(font_style='Body1',

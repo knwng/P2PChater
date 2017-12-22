@@ -4,7 +4,6 @@ from config import *
 import time
 
 
-
 def main():
     client = Comm2Server('166.111.140.14', 8000, '2014010622')
     friend = Comm2Server('166.111.140.14', 8000, '2014011653')
