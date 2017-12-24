@@ -9,20 +9,25 @@ from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.properties import ObjectProperty, StringProperty
 from kivy.uix.image import Image
+from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
+from kivy.utils import get_color_from_hex
 
 from kivymd.bottomsheet import MDListBottomSheet, MDGridBottomSheet
 from kivymd.button import MDIconButton
 from kivymd.date_picker import MDDatePicker
 from kivymd.dialog import MDDialog
 from kivymd.label import MDLabel
-from kivymd.list import ILeftBody, ILeftBodyTouch, IRightBodyTouch, BaseListItem
+from kivymd.list import ILeftBody, ILeftBodyTouch, IRightBodyTouch, BaseListItem, OneLineListItem, TwoLineListItem
 from kivymd.material_resources import DEVICE_TYPE
 from kivymd.navigationdrawer import MDNavigationDrawer, NavigationDrawerHeaderBase, NavigationDrawerIconButton
 from kivymd.selectioncontrols import MDCheckbox
 from kivymd.snackbar import Snackbar
 from kivymd.theming import ThemeManager
 from kivymd.time_picker import MDTimePicker
+from kivymd.toolbar import Toolbar
+from kivymd.color_definitions import colors
+from kivymd.textfields import MDTextField
 
 main_widget_kv = '''
 #:import Toolbar kivymd.toolbar.Toolbar
@@ -104,7 +109,6 @@ BoxLayout:
                         size_hint: 0.1, 0.05
         Screen:
             name: 'mainpage'
-            # id: mainpage
             MDBottomNavigation:
                 id: main_navigation
                 MDBottomNavigationItem:
@@ -112,39 +116,10 @@ BoxLayout:
                     text: "Chat"
                     icon: "alert-octagon"
                     id: chat
-                    # MDLabel:
-                    #     font_style: 'Body1'
-                    #     theme_text_color: 'Primary'
-                    #     text: "Warning!"
-                    #     halign: 'center'
-                    BoxLayout:
-                        orientation: 'vertical'
-                        HackedDemoNavDrawer:
-                            id: nav_drawer
-                            NavigationDrawerIconButton:
-                                active_color_type: 'custom'
-                                icon: 'checkbox-blank-circle'
-                                text: "Custom active color"
-                                active_color: [1, 0, 1, 1]
-                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
-                            NavigationDrawerIconButton:
-                                active_color_type: 'custom'
-                                text: "Custom active color"
-                                active_color: [1, 0, 1, 1]
-                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
-                            NavigationDrawerIconButton:
-                                active_color_type: 'custom'
-                                text: "Custom active color"
-                                active_color: [1, 0, 1, 1]
-                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
-                            NavigationDrawerIconButton:
-                                active_color_type: 'custom'
-                                text: "Custom active color"
-                                active_color: [1, 0, 1, 1]
-                                # on_release: app.root.ids.scr_mngr.current = 'accordion'
-                            
-                            
-                            
+                    ScrollView:
+                        do_scroll_x: False
+                        MDList:
+                            id: ml
                 MDBottomNavigationItem:
                     name: 'Moment'
                     text: "Moment"
@@ -168,7 +143,46 @@ BoxLayout:
                         padding: dp(48)
                         spacing: 10
                         MDTextField:
-                            hint_text: "Hello again"                         
+                            hint_text: "Hello again"   
+        Screen:
+            name: 'chatroom'
+            Toolbar:
+                id: chatroom_toolbar
+                title: 'ChatRoom'
+                pos_hint: {'center_x': 0.5, 'top': 1}
+                size_hint: 1, 0.1
+                md_bg_color: get_color_from_hex(colors['DeepPurple']['A400'])
+                background_palette: 'DeepPurple'
+                background_hue: 'A400'
+                left_action_items: [['arrow-left', app.back_to_mainpage]]
+            FloatLayout:
+                orientation: 'horizontal'
+                pos_hint: {'left': 0, 'bottom': 0}
+                size_hint: 1, 0.1
+                MDIconButton:
+                    icon: 'file'
+                    pos_hint: {'left': 0.3, 'center_y': 0.5}
+                    # disabled: disable_the_buttons.active
+                MDTextField:
+                    id: chatroom_input
+                    required: True
+                    multiline: True
+                    color_mode: 'accent'
+                    pos_hint: {'center_x': 0.5, 'center_y': 0.5}
+                    size_hint: 0.6, 0.9
+                MDRaisedButton:
+                    text: "Send"
+                    elevation_normal: 2
+                    opposite_colors: True
+                    pos_hint: {'right': 0.96, 'center_y': 0.5}
+                    size_hint: 0.1, 0.4
+                    # disabled: disable_the_buttons.active
+            ScrollView:
+                do_scroll_x: False
+                id: chatroom_msg
+                pos_hint: {'center_x': 0.5, 'top': 0.9}
+                size_hint: 1, 0.7
+                                       
 '''
 
 class HackedDemoNavDrawer(MDNavigationDrawer):
@@ -196,6 +210,7 @@ class KitchenSink(App):
     friendlist_conn = None
     friend_list = []
     curr_proc_friend = None
+    curr_generate_client = None
     login_status = False
 
     menu_items = [
@@ -222,12 +237,14 @@ class KitchenSink(App):
         # main_widget.ids.text_field_error.bind(
         #     on_text_validate=self.set_error_message,
         #     on_focus=self.set_error_message)
+
         self.bottom_navigation_remove_mobile(main_widget)
         self.host = '166.111.140.14'
-        self.comm2server(self.host, 8000)
-        self.comm2friend(self.host, 8000)
-        # reactor.connectTCP(self.host, 8000, LoginClientFactory(self))
-        reactor.listenTCP(12500, RequestServerFactory(self))
+        self.server_port = 8000
+        self.listen_port = 12500
+        self.comm2server(self.host, self.server_port)
+        self.comm2friendlist(self.host, self.server_port)
+        reactor.listenTCP(self.listen_port, RequestServerFactory(self))
         return main_widget
 
     # Network
@@ -235,27 +252,27 @@ class KitchenSink(App):
         reactor.connectTCP(dst_host, dst_port, LoginClientFactory(self))
         return
 
-    def comm2friend(self, dst_host, dst_port):
+    def comm2friendlist(self, dst_host, dst_port):
         reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
         return
 
+    def comm2chat(self, dst_host, dst_port):
+        reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self))
+        return
+
     def on_login_conn(self, conn):
-        # print('Connection {} setup successfully'.format(conn))
         self.login_conn = conn
 
     def on_friendlist_conn(self, conn):
-        print('Connection {} setup successfully'.format(conn))
         self.friendlist_conn = conn
 
+    def on_chatclient_conn(self, conn):
+        self.friend_list[self.curr_generate_client].chat_client = conn
+
     def login(self, username, password, *args):
-        # print('comm2server instance: {}'.format(self.login_conn))
         if self.login_conn:
-            # print('send message to server: {}'.format('{}_{}'.format(username, password).format('utf-8')))
             self.login_conn.write('{}_{}'.format(username, password).encode('utf-8'))
-            # print('\n{}_{}\n'.format(username, password).encode('utf-8'))
-            # self.login_conn.write('\n{}_{}\n'.format(username, password).encode('utf-8'))
         else:
-            print('comm2server instance not setup')
             self.show_connection_error_dialog()
         return
 
@@ -266,18 +283,20 @@ class KitchenSink(App):
             self.login_status = True
             self.root.ids.scr_mngr.current = 'mainpage'
             self.get_friendlist()
+            Clock.schedule_interval(self.get_friendlist, 1)
         else:
             self.show_connection_error_dialog()
 
-    def get_friendlist(self):
+    def get_friendlist(self, *largs):
         with file(friend_list_fn, 'r') as f:
             flt = f.readlines()
         flt = [x[0:-1] for x in flt if re.match(pattern_id, x) is not None]
-        print('get friend list: {}'.format(flt))
+        # print('get friend list: {}'.format(flt))
+        self.friend_list = []
         for i in flt:
-            self.friend_list.append([i])
+            self.friend_list.append(Friends(name=i))
         self.curr_proc_friend = 0
-        self.friendlist_conn.write('q{}'.format(self.friend_list[0][0]))
+        self.friendlist_conn.write('q{}'.format(self.friend_list[0].name))
 
     def query_friend(self, id):
         self.friendlist_conn.write(id.encode('utf-8'))
@@ -285,20 +304,61 @@ class KitchenSink(App):
         return
 
     def proc_friend_list(self, flag, msg=None):
-        self.friend_list[self.curr_proc_friend].append(flag)
+        self.friend_list[self.curr_proc_friend].is_online = flag
         if flag:
-            self.friend_list[self.curr_proc_friend].append(msg)
+            self.friend_list[self.curr_proc_friend].ip = msg
         self.curr_proc_friend += 1
         if self.curr_proc_friend < len(self.friend_list):
-            self.friendlist_conn.write('q{}'.format(self.friend_list[self.curr_proc_friend][0]))
+            self.friendlist_conn.write('q{}'.format(self.friend_list[self.curr_proc_friend].name))
         else:
-            # next proc
-            print('Finally Friendlist: {}'.format(self.friend_list))
-
+            self.show_friend_card()
         return
 
+    def back_to_mainpage(self, *args):
+        self.root.ids.scr_mngr.current = 'mainpage'
+        return
+
+
     def show_friend_card(self):
-        
+        self.root.ids.ml.clear_widgets()
+        for i in self.friend_list:
+            if i.is_online:
+                listwidget = OneLineListItem(text=i.name,
+                                             theme_text_color='Custom',
+                                             text_color=get_color_from_hex(colors['Amber']['700']),
+                                             on_release=self.chatwith)
+                # iconwidget = IconLeftSampleWidget(icon='account', id='icon_{}'.format(i.name))
+                iconwidget = IconLeftSampleWidget(icon='account')
+                listwidget.add_widget(iconwidget)
+                self.root.ids.ml.add_widget(listwidget)
+            else:
+                listwidget = OneLineListItem(text=i.name,
+                                             theme_text_color='Custom',
+                                             on_release=self.chatwith)
+                # iconwidget = IconLeftSampleWidget(icon='account-off', id='icon_{}'.format(i.name))
+                iconwidget = IconLeftSampleWidget(icon='account-off')
+                listwidget.add_widget(iconwidget)
+                self.root.ids.ml.add_widget(listwidget)
+        return
+
+    def chatwith(self, instance):
+        print('Widget {} are pressed'.format(instance.text))
+        for i in range(len(self.friend_list)):
+            if self.friend_list[i].name == instance.text:
+                if self.friend_list[i].is_online is False:
+                    self.show_offline_error_dialog()
+                    return
+                elif self.friend_list[i].is_use is False:
+                    self.friend_list[i].is_use = True
+                    self.curr_generate_client = i
+                    self.comm2chat(self.host, self.listen_port)
+                self.show_chat_window(self.friend_list[i].name)
+                return
+
+
+    def show_chat_window(self, id):
+        self.root.ids.chatroom_toolbar.title = 'Chat With {}'.format(id)
+        self.root.ids.scr_mngr.current = 'chatroom'
         return
 
     def bottom_navigation_remove_mobile(self, widget):
@@ -327,6 +387,25 @@ class KitchenSink(App):
             self.login(username, password)
         else:
             self.show_login_error_dialog()
+
+    def show_offline_error_dialog(self):
+        content = MDLabel(font_style='Body1',
+                          theme_text_color='Secondary',
+                          text='Friend is offline',
+                          size_hint_y=None,
+                          valign='top')
+        content.bind(texture_size=content.setter('size'))
+        self.offline_error_dialog = MDDialog(title="This friend is currently offline",
+                                           content=content,
+                                           size_hint=(.8, None),
+                                           height=dp(200),
+                                           auto_dismiss=False)
+        self.offline_error_dialog.add_action_button("OK",
+                                                  action=lambda *x: self.offline_error_dialog_dismiss())
+        self.offline_error_dialog.open()
+
+    def offline_error_dialog_dismiss(self):
+        self.offline_error_dialog.dismiss()
 
     def show_login_error_dialog(self):
         content = MDLabel(font_style='Body1',
@@ -367,6 +446,9 @@ class KitchenSink(App):
 
     def connection_error_dialog_dismiss(self):
         self.connection_error_dialog.dismiss()
+        self.comm2server(self.host, self.server_port)
+        self.comm2friend(self.host, self.server_port)
+        reactor.listenTCP(self.listen_port, RequestServerFactory(self))
 
     def show_example_dialog(self):
         content = MDLabel(font_style='Body1',

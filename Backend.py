@@ -26,7 +26,7 @@ class LoginClient(protocol.Protocol):
 
     def dataReceived(self, data):
         # self.factory.app.on_message(data)
-        print('Received data: {}'.format(data))
+        # print('Received data: {}'.format(data))
         if self.factory.app.login_status is False:
             if data == 'lol':
                 self.factory.app.login_callback(True)
@@ -39,6 +39,7 @@ class LoginClient(protocol.Protocol):
                 self.factory.app.proc_friend_list(True, data)
             else:
                 print('False query {} for friend status'.format(data))
+
 
 class LoginClientFactory(protocol.ClientFactory):
     protocol = LoginClient
@@ -55,12 +56,12 @@ class FriendlistClient(protocol.Protocol):
         self.factory.app.on_friendlist_conn(self.transport)
 
     def dataReceived(self, data):
-        print('Receive data from friend: {}'.format(data))
+        # print('Receive data from friend: {}'.format(data))
         if data == 'n':
-            print('get n')
+            # print('get n')
             self.factory.app.proc_friend_list(False)
         elif re.match(pattern_ip, data):
-            print('get ip: {}'.format(data))
+            # print('get ip: {}'.format(data))
             self.factory.app.proc_friend_list(True, data)
         else:
             print('False query {} for friend status'.format(data))
@@ -68,6 +69,32 @@ class FriendlistClient(protocol.Protocol):
 
 class FriendlistClientFactory(protocol.ClientFactory):
     protocol = FriendlistClient
+
+    def __init__(self, app):
+        self.app = app
+
+
+class ChatClient(protocol.Protocol):
+    def connectionMade(self):
+        # send 'CONNECT' message and
+        # force TCP flush by appending a line feed ('\n')
+        # self.transport.write('CONNECT\n')
+        self.factory.app.on_chatclient_conn(self.transport)
+
+    def dataReceived(self, data):
+        # print('Receive data from friend: {}'.format(data))
+        if data == 'n':
+            # print('get n')
+            self.factory.app.proc_friend_list(False)
+        elif re.match(pattern_ip, data):
+            # print('get ip: {}'.format(data))
+            self.factory.app.proc_friend_list(True, data)
+        else:
+            print('False query {} for friend status'.format(data))
+
+
+class ChatClientFactory(protocol.ClientFactory):
+    protocol = ChatClient
 
     def __init__(self, app):
         self.app = app
