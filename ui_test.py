@@ -176,7 +176,7 @@ BoxLayout:
                     opposite_colors: True
                     pos_hint: {'right': 0.96, 'center_y': 0.5}
                     size_hint: 0.1, 0.4
-                    # disabled: disable_the_buttons.active
+                    on_release: app.send_msg()
             ScrollView:
                 do_scroll_x: False
                 id: chatroom_msg
@@ -208,9 +208,9 @@ class KitchenSink(App):
     msg = StringProperty('')
     login_conn = None
     friendlist_conn = None
-    friend_list = []
+    friend_list = None
     curr_proc_friend = None
-    curr_generate_client = None
+    # curr_generate_client = None
     login_status = False
 
     menu_items = [
@@ -256,8 +256,8 @@ class KitchenSink(App):
         reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
         return
 
-    def comm2chat(self, dst_host, dst_port):
-        reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self))
+    def comm2chat(self, dst_host, dst_port, idx):
+        reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
         return
 
     def on_login_conn(self, conn):
@@ -266,8 +266,8 @@ class KitchenSink(App):
     def on_friendlist_conn(self, conn):
         self.friendlist_conn = conn
 
-    def on_chatclient_conn(self, conn):
-        self.friend_list[self.curr_generate_client].chat_client = conn
+    def on_chatclient_conn(self, conn, idx):
+        self.friend_list[idx].chat_client = conn
 
     def login(self, username, password, *args):
         if self.login_conn:
@@ -288,13 +288,13 @@ class KitchenSink(App):
             self.show_connection_error_dialog()
 
     def get_friendlist(self, *largs):
-        with file(friend_list_fn, 'r') as f:
-            flt = f.readlines()
-        flt = [x[0:-1] for x in flt if re.match(pattern_id, x) is not None]
-        # print('get friend list: {}'.format(flt))
-        self.friend_list = []
-        for i in flt:
-            self.friend_list.append(Friends(name=i))
+        if self.friend_list is None:
+            with file(friend_list_fn, 'r') as f:
+                flt = f.readlines()
+            flt = [x[0:-1] for x in flt if re.match(pattern_id, x) is not None]
+            self.friend_list = []
+            for i in flt:
+                self.friend_list.append(Friends(name=i))
         self.curr_proc_friend = 0
         self.friendlist_conn.write('q{}'.format(self.friend_list[0].name))
 
@@ -307,6 +307,10 @@ class KitchenSink(App):
         self.friend_list[self.curr_proc_friend].is_online = flag
         if flag:
             self.friend_list[self.curr_proc_friend].ip = msg
+        else:
+            if self.friend_list[self.curr_proc_friend].is_online is True:
+                # your friend disconnect from you
+                self.chat_disconnect(self.curr_proc_friend)
         self.curr_proc_friend += 1
         if self.curr_proc_friend < len(self.friend_list):
             self.friendlist_conn.write('q{}'.format(self.friend_list[self.curr_proc_friend].name))
@@ -314,10 +318,16 @@ class KitchenSink(App):
             self.show_friend_card()
         return
 
+    def chat_disconnect(self, idx):
+        # save log
+        with open('log_{}'.format(self.friend_list[idx].name), 'a') as f:
+            f.writelines(self.friend_list[idx].msg)
+        self.friend_list[idx].clear_connection_info()
+
+
     def back_to_mainpage(self, *args):
         self.root.ids.scr_mngr.current = 'mainpage'
         return
-
 
     def show_friend_card(self):
         self.root.ids.ml.clear_widgets()
@@ -350,16 +360,24 @@ class KitchenSink(App):
                     return
                 elif self.friend_list[i].is_use is False:
                     self.friend_list[i].is_use = True
-                    self.curr_generate_client = i
-                    self.comm2chat(self.host, self.listen_port)
+                    # self.curr_generate_client = i
+                    self.comm2chat(self.host, self.listen_port, i)
                 self.show_chat_window(self.friend_list[i].name)
                 return
-
 
     def show_chat_window(self, id):
         self.root.ids.chatroom_toolbar.title = 'Chat With {}'.format(id)
         self.root.ids.scr_mngr.current = 'chatroom'
         return
+
+    def send_msg(self):
+        client_name = self.root.ids.chatroom_toolbar.title.split(' ')[-1]
+        for i in self.friend_list:
+            if i.name == client_name:
+                msg = self.root.ids.chatroom_input.text
+                # 0 for in-msg, 1 for out-msg
+                i.msg.append([time.time(), 1, msg])
+                i.chat_client.write(msg)
 
     def bottom_navigation_remove_mobile(self, widget):
         # Removes some items from bottom-navigation demo when on mobile

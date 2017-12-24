@@ -1,14 +1,15 @@
 import numpy as np
 from config import *
 import socket
+import time
+from time import ctime
+import re
 socket.setdefaulttimeout(TIMEOUT)
 from kivy.support import install_twisted_reactor
 install_twisted_reactor()
-from time import ctime
 from kivy.clock import Clock
 from kivy.uix.widget import Widget
 from twisted.internet import reactor, protocol
-import re
 
 
 def esc_markup(msg):
@@ -75,29 +76,37 @@ class FriendlistClientFactory(protocol.ClientFactory):
 
 
 class ChatClient(protocol.Protocol):
+    def __init__(self, idx):
+        self.idx = idx
+        self.name = self.factory.app.friend_list[self.idx].name
+
     def connectionMade(self):
         # send 'CONNECT' message and
         # force TCP flush by appending a line feed ('\n')
         # self.transport.write('CONNECT\n')
-        self.factory.app.on_chatclient_conn(self.transport)
+        self.factory.app.friend_list[self.idx].chat_client = self.transport
+        # self.factory.app.on_chatclient_conn(self.transport, self.idx)
 
     def dataReceived(self, data):
-        # print('Receive data from friend: {}'.format(data))
-        if data == 'n':
-            # print('get n')
-            self.factory.app.proc_friend_list(False)
-        elif re.match(pattern_ip, data):
-            # print('get ip: {}'.format(data))
-            self.factory.app.proc_friend_list(True, data)
-        else:
-            print('False query {} for friend status'.format(data))
+        print('Client {} received msg: {}'.format(self.name, data))
+        # 0 for in-msg, 1 for out-msg
+        self.factory.app.friend_list[self.idx].msg.append([time.time(), 0, data])
+        return
 
 
 class ChatClientFactory(protocol.ClientFactory):
     protocol = ChatClient
 
-    def __init__(self, app):
+    def __init__(self, app, idx):
         self.app = app
+        self.idx = idx
+
+    def buildProtocol(self, addr):
+        bot = ChatClient(self.id)
+        bot.factory = self
+        # self.bot = bot
+        # self.connection_attempts = 0
+        return bot
 
 
 class RequestServer(protocol.Protocol):
