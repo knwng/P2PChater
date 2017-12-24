@@ -8,6 +8,7 @@ from time import ctime
 from kivy.clock import Clock
 from kivy.uix.widget import Widget
 from twisted.internet import reactor, protocol
+import re
 
 
 def esc_markup(msg):
@@ -25,11 +26,19 @@ class LoginClient(protocol.Protocol):
 
     def dataReceived(self, data):
         # self.factory.app.on_message(data)
-        if data == 'lol':
-            self.factory.app.login_callback(True)
+        print('Received data: {}'.format(data))
+        if self.factory.app.login_status is False:
+            if data == 'lol':
+                self.factory.app.login_callback(True)
+            else:
+                self.factory.app.login_callback(False)
         else:
-            self.factory.app.login_callback(False)
-
+            if data == 'n':
+                self.factory.app.proc_friend_list(False)
+            elif re.match(pattern_ip, data):
+                self.factory.app.proc_friend_list(True, data)
+            else:
+                print('False query {} for friend status'.format(data))
 
 class LoginClientFactory(protocol.ClientFactory):
     protocol = LoginClient
@@ -46,7 +55,15 @@ class FriendlistClient(protocol.Protocol):
         self.factory.app.on_friendlist_conn(self.transport)
 
     def dataReceived(self, data):
-        self.factory.app.proc_friend_list(data)
+        print('Receive data from friend: {}'.format(data))
+        if data == 'n':
+            print('get n')
+            self.factory.app.proc_friend_list(False)
+        elif re.match(pattern_ip, data):
+            print('get ip: {}'.format(data))
+            self.factory.app.proc_friend_list(True, data)
+        else:
+            print('False query {} for friend status'.format(data))
 
 
 class FriendlistClientFactory(protocol.ClientFactory):

@@ -195,6 +195,8 @@ class KitchenSink(App):
     login_conn = None
     friendlist_conn = None
     friend_list = []
+    curr_proc_friend = None
+    login_status = False
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
@@ -222,24 +224,36 @@ class KitchenSink(App):
         #     on_focus=self.set_error_message)
         self.bottom_navigation_remove_mobile(main_widget)
         self.host = '166.111.140.14'
-        self.connect(self.host, 8000)
-        reactor.connectTCP(self.host, 8000, LoginClientFactory(self))
+        self.comm2server(self.host, 8000)
+        self.comm2friend(self.host, 8000)
+        # reactor.connectTCP(self.host, 8000, LoginClientFactory(self))
         reactor.listenTCP(12500, RequestServerFactory(self))
         return main_widget
 
     # Network
+    def comm2server(self, dst_host, dst_port):
+        reactor.connectTCP(dst_host, dst_port, LoginClientFactory(self))
+        return
+
+    def comm2friend(self, dst_host, dst_port):
+        reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
+        return
+
     def on_login_conn(self, conn):
-        print('Connection {} setup successfully'.format(conn))
+        # print('Connection {} setup successfully'.format(conn))
         self.login_conn = conn
 
     def on_friendlist_conn(self, conn):
+        print('Connection {} setup successfully'.format(conn))
         self.friendlist_conn = conn
 
     def login(self, username, password, *args):
-        print('comm2server instance: {}'.format(self.login_conn))
+        # print('comm2server instance: {}'.format(self.login_conn))
         if self.login_conn:
-            print('send message to server: {}'.format('{}_{}'.format(username, password).format('utf-8')))
+            # print('send message to server: {}'.format('{}_{}'.format(username, password).format('utf-8')))
             self.login_conn.write('{}_{}'.format(username, password).encode('utf-8'))
+            # print('\n{}_{}\n'.format(username, password).encode('utf-8'))
+            # self.login_conn.write('\n{}_{}\n'.format(username, password).encode('utf-8'))
         else:
             print('comm2server instance not setup')
             self.show_connection_error_dialog()
@@ -247,14 +261,45 @@ class KitchenSink(App):
 
     def login_callback(self, FLAG):
         if FLAG:
+            # self.login_conn.loseConnection()
+            # del self.login_conn
+            self.login_status = True
             self.root.ids.scr_mngr.current = 'mainpage'
-            reactor.connectTCP(self.host, 8000, FriendlistClientFactory(self))
+            self.get_friendlist()
         else:
             self.show_connection_error_dialog()
 
-    # def proc_friend_list(self, msg):
+    def get_friendlist(self):
+        with file(friend_list_fn, 'r') as f:
+            flt = f.readlines()
+        flt = [x[0:-1] for x in flt if re.match(pattern_id, x) is not None]
+        print('get friend list: {}'.format(flt))
+        for i in flt:
+            self.friend_list.append([i])
+        self.curr_proc_friend = 0
+        self.friendlist_conn.write('q{}'.format(self.friend_list[0][0]))
 
+    def query_friend(self, id):
+        self.friendlist_conn.write(id.encode('utf-8'))
+        self.friendlist_conn.loseConnection()
+        return
 
+    def proc_friend_list(self, flag, msg=None):
+        self.friend_list[self.curr_proc_friend].append(flag)
+        if flag:
+            self.friend_list[self.curr_proc_friend].append(msg)
+        self.curr_proc_friend += 1
+        if self.curr_proc_friend < len(self.friend_list):
+            self.friendlist_conn.write('q{}'.format(self.friend_list[self.curr_proc_friend][0]))
+        else:
+            # next proc
+            print('Finally Friendlist: {}'.format(self.friend_list))
+
+        return
+
+    def show_friend_card(self):
+        
+        return
 
     def bottom_navigation_remove_mobile(self, widget):
         # Removes some items from bottom-navigation demo when on mobile
@@ -274,8 +319,8 @@ class KitchenSink(App):
     def get_username_passwd(self):
         username = self.root.ids.username.text
         password = self.root.ids.password.text
-        print('Username: {}'.format(username))
-        print('Password: {}'.format(password))
+        # print('Username: {}'.format(username))
+        # print('Password: {}'.format(password))
         # for i in self.root.ids:
         #     print('Current Widget: {}'.format(i))
         if username == '2014010622' and password == 'net2017':
@@ -316,7 +361,7 @@ class KitchenSink(App):
                                                 size_hint=(.8, None),
                                                 height=dp(200),
                                                 auto_dismiss=False)
-        self.connection_error_dialog.add_action_button("OD",
+        self.connection_error_dialog.add_action_button("OK",
                                                        action=lambda *x: self.connection_error_dialog_dismiss())
         self.connection_error_dialog.open()
 
