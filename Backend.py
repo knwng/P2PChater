@@ -42,7 +42,6 @@ class LoginClient(protocol.Protocol):
             else:
                 print('False query {} for friend status'.format(data))
 
-
 class LoginClientFactory(protocol.ClientFactory):
     protocol = LoginClient
 
@@ -122,6 +121,26 @@ class RequestServerFactory(protocol.Factory):
 
     def __init__(self, app):
         self.app = app
+
+
+class UDPChatClient(protocol.DatagramProtocol):
+
+    def __init__(self, app):
+        # super(EchoClient, self).__init__()
+        print('app instance {}'.format(app))
+        self.app = app
+
+    def startProtocol(self):
+        self.transport.connect('127.0.0.1', 8000)
+        self.app.on_udp_connection(self.transport)
+
+    def datagramReceived(self, data, address):
+        print('Receive message [{}] from [{}]'.format(data, address))
+        # self.factory.app.print_message(data.decode('utf-8'))
+
+
+
+
 
 
 class Comm2ServerWidget(Widget):

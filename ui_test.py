@@ -224,34 +224,22 @@ BoxLayout:
                                        
 '''
 
-class HackedDemoNavDrawer(MDNavigationDrawer):
-    # DO NOT USE
-    def add_widget(self, widget, index=0):
-        if issubclass(widget.__class__, BaseListItem):
-            self._list.add_widget(widget, index)
-            if len(self._list.children) == 1:
-                widget._active = True
-                self.active_item = widget
-            # widget.bind(on_release=lambda x: self.panel.toggle_state())
-            widget.bind(on_release=lambda x: x._set_active(True, list=self))
-        elif issubclass(widget.__class__, NavigationDrawerHeaderBase):
-            self._header_container.add_widget(widget)
-        else:
-            super(MDNavigationDrawer, self).add_widget(widget, index)
-
 
 class KitchenSink(App):
     userid = ''
+    error_dialog = None
     theme_cls = ThemeManager()
     previous_date = ObjectProperty()
-    title = "KivyMD Kitchen Sink"
+    title = "P2PChater"
     msg = StringProperty('')
     login_conn = None
     friendlist_conn = None
     friend_list = None
     curr_proc_friend = None
-    # curr_generate_client = None
     login_status = False
+    host = '166.111.140.14'
+    server_port = 8000
+    listen_port = 12500
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
@@ -279,9 +267,7 @@ class KitchenSink(App):
         #     on_focus=self.set_error_message)
 
         self.bottom_navigation_remove_mobile(main_widget)
-        self.host = '166.111.140.14'
-        self.server_port = 8000
-        self.listen_port = 12500
+
         self.comm2server(self.host, self.server_port)
         self.comm2friendlist(self.host, self.server_port)
         reactor.listenTCP(self.listen_port, RequestServerFactory(self))
@@ -289,22 +275,11 @@ class KitchenSink(App):
 
     # Network
 
-
-
-    def on_login_conn(self, conn):
-        self.login_conn = conn
-
-    def on_friendlist_conn(self, conn):
-        self.friendlist_conn = conn
-
-    def on_chatclient_conn(self, conn, idx):
-        self.friend_list[idx].chat_client = conn
-
     def login(self, username, password, *args):
         if self.login_conn:
             self.login_conn.write('{}_{}'.format(username, password).encode('utf-8'))
         else:
-            self.show_connection_error_dialog()
+            self.show_error_dialog('connection')
         return
 
     def login_callback(self, FLAG):
@@ -317,7 +292,7 @@ class KitchenSink(App):
             self.get_friendlist()
             Clock.schedule_interval(self.get_friendlist, 1)
         else:
-            self.show_connection_error_dialog()
+            self.show_error_dialog('connection')
 
     def get_friendlist(self, *largs):
         if self.friend_list is None:
@@ -362,6 +337,11 @@ class KitchenSink(App):
         return
 
     def handle_chat_request(self, data):
+        """
+
+        :param data: request_message, in format chat_userid_port, like chat_2014010622_16430
+        :return:
+        """
         pass
 
 
@@ -392,7 +372,7 @@ class KitchenSink(App):
         for i in range(len(self.friend_list)):
             if self.friend_list[i].name == instance.text:
                 if self.friend_list[i].is_online is False:
-                    self.show_offline_error_dialog()
+                    self.show_error_dialog('offline')
                     return
                 elif self.friend_list[i].is_use is False:
                     self.friend_list[i].is_use = True
@@ -439,20 +419,6 @@ class KitchenSink(App):
 
         # print instance.selection
 
-    def bottom_navigation_remove_mobile(self, widget):
-        # Removes some items from bottom-navigation demo when on mobile
-        if DEVICE_TYPE == 'mobile':
-            widget.ids.main_navigation.remove_widget(widget.ids.bottom_navigation_desktop_2)
-        if DEVICE_TYPE == 'mobile' or DEVICE_TYPE == 'tablet':
-            widget.ids.main_navigation.remove_widget(widget.ids.bottom_navigation_desktop_1)
-
-    def show_example_snackbar(self, snack_type):
-        if snack_type == 'simple':
-            Snackbar(text="This is a snackbar!").show()
-        elif snack_type == 'button':
-            Snackbar(text="This is a snackbar", button_text="with a button!", button_callback=lambda *args: 2).show()
-        elif snack_type == 'verylong':
-            Snackbar(text="This is a very very very very very very very long snackbar!").show()
 
     def get_username_passwd(self):
         username = self.root.ids.username.text
@@ -465,9 +431,7 @@ class KitchenSink(App):
             self.login(username, password)
             self.userid = username
         else:
-            self.show_login_error_dialog()
-
-
+            self.show_error_dialog('login')
 
     # connection_wrapper
     def comm2server(self, dst_host, dst_port):
@@ -482,120 +446,57 @@ class KitchenSink(App):
         reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
         return
 
+    # connection handle
+    def on_login_conn(self, conn):
+        self.login_conn = conn
+
+    def on_friendlist_conn(self, conn):
+        self.friendlist_conn = conn
+
+    def on_chatclient_conn(self, conn, idx):
+        self.friend_list[idx].chat_client = conn
+
     # dialogs
-
-
-
-
-
-
-
-    def show_offline_error_dialog(self):
+    def show_error_dialog(self, error_type):
+        """
+        :param error_type: offline, login, connection
+        :return: None
+        """
+        if error_type == 'offline':
+            label_text = 'Friend is offline'
+            dialog_text = 'This friend is currently offline'
+        elif error_type == 'login':
+            label_text = 'Please Check your username and password'
+            dialog_text = 'Wrong username/password!'
+        elif error_type == 'connection':
+            label_text = 'Please Check your Internet Connection'
+            dialog_text = 'Connection Failed'
+        else:
+            raise Exception, 'No such error_type'
         content = MDLabel(font_style='Body1',
                           theme_text_color='Secondary',
-                          text='Friend is offline',
+                          text=label_text,
                           size_hint_y=None,
                           valign='top')
         content.bind(texture_size=content.setter('size'))
-        self.offline_error_dialog = MDDialog(title="This friend is currently offline",
-                                           content=content,
-                                           size_hint=(.8, None),
-                                           height=dp(200),
-                                           auto_dismiss=False)
-        self.offline_error_dialog.add_action_button("OK",
-                                                  action=lambda *x: self.offline_error_dialog_dismiss())
-        self.offline_error_dialog.open()
+        self.error_dialog = MDDialog(title=dialog_text,
+                                     content=content,
+                                     size_hint=(.8, None),
+                                     height=dp(200),
+                                     auto_dismiss=False)
+        self.error_dialog.add_action_button("OK",
+                                                  action=lambda *x: self.error_dialog_dismiss(error_type))
+        self.error_dialog.open()
 
-    def offline_error_dialog_dismiss(self):
-        self.offline_error_dialog.dismiss()
-
-    def show_login_error_dialog(self):
-        content = MDLabel(font_style='Body1',
-                          theme_text_color='Secondary',
-                          text='Please Check your username and password',
-                          size_hint_y=None,
-                          valign='top')
-        content.bind(texture_size=content.setter('size'))
-        self.login_error_dialog = MDDialog(title="Wrong username/password!",
-                                           content=content,
-                                           size_hint=(.8, None),
-                                           height=dp(200),
-                                           auto_dismiss=False)
-        self.login_error_dialog.add_action_button("OK",
-                                                  action=lambda *x: self.login_error_dialog_dismiss())
-        self.login_error_dialog.open()
-
-    def login_error_dialog_dismiss(self):
-        self.root.ids.username.text = ''
-        self.root.ids.password.text = ''
-        self.login_error_dialog.dismiss()
-
-    def show_connection_error_dialog(self):
-        content = MDLabel(font_style='Body1',
-                          theme_text_color='Secondary',
-                          text='Please Check your Internet Connection',
-                          size_hint_y=None,
-                          valign='top')
-        content.bind(texture_size=content.setter('size'))
-        self.connection_error_dialog = MDDialog(title="Connection Failed",
-                                                content=content,
-                                                size_hint=(.8, None),
-                                                height=dp(200),
-                                                auto_dismiss=False)
-        self.connection_error_dialog.add_action_button("OK",
-                                                       action=lambda *x: self.connection_error_dialog_dismiss())
-        self.connection_error_dialog.open()
-
-    def connection_error_dialog_dismiss(self):
-        self.connection_error_dialog.dismiss()
-        self.comm2server(self.host, self.server_port)
-        self.comm2friendlist(self.host, self.server_port)
-        reactor.listenTCP(self.listen_port, RequestServerFactory(self))
-
-    def show_example_dialog(self):
-        content = MDLabel(font_style='Body1',
-                          theme_text_color='Secondary',
-                          text="This is a dialog with a title and some text. "
-                               "That's pretty awesome right!",
-                          size_hint_y=None,
-                          valign='top')
-        content.bind(texture_size=content.setter('size'))
-        self.dialog = MDDialog(title="This is a test dialog",
-                               content=content,
-                               size_hint=(.8, None),
-                               height=dp(200),
-                               auto_dismiss=False)
-
-        self.dialog.add_action_button("Dismiss",
-                                      action=lambda *x: self.dialog.dismiss())
-        self.dialog.open()
-
-    def show_example_long_dialog(self):
-        content = MDLabel(font_style='Body1',
-                          theme_text_color='Secondary',
-                          text="Lorem ipsum dolor sit amet, consectetur "
-                               "adipiscing elit, sed do eiusmod tempor "
-                               "incididunt ut labore et dolore magna aliqua. "
-                               "Ut enim ad minim veniam, quis nostrud "
-                               "exercitation ullamco laboris nisi ut aliquip "
-                               "ex ea commodo consequat. Duis aute irure "
-                               "dolor in reprehenderit in voluptate velit "
-                               "esse cillum dolore eu fugiat nulla pariatur. "
-                               "Excepteur sint occaecat cupidatat non "
-                               "proident, sunt in culpa qui officia deserunt "
-                               "mollit anim id est laborum.",
-                          size_hint_y=None,
-                          valign='top')
-        content.bind(texture_size=content.setter('size'))
-        self.dialog = MDDialog(title="This is a long test dialog",
-                               content=content,
-                               size_hint=(.8, None),
-                               height=dp(200),
-                               auto_dismiss=False)
-
-        self.dialog.add_action_button("Dismiss",
-                                      action=lambda *x: self.dialog.dismiss())
-        self.dialog.open()
+    def error_dialog_dismiss(self, error_type):
+        if error_type == 'login':
+            self.root.ids.username.text = ''
+            self.root.ids.password.text = ''
+        elif error_type == 'connection':
+            self.comm2server(self.host, self.server_port)
+            self.comm2friendlist(self.host, self.server_port)
+            reactor.listenTCP(self.listen_port, RequestServerFactory(self))
+        self.error_dialog.dismiss()
 
     def get_time_picker_data(self, instance, time):
         self.root.ids.time_picker_label.text = str(time)
@@ -648,6 +549,21 @@ class KitchenSink(App):
                     icon_src='./assets/camera.png')
         bs.open()
 
+    def bottom_navigation_remove_mobile(self, widget):
+        # Removes some items from bottom-navigation demo when on mobile
+        if DEVICE_TYPE == 'mobile':
+            widget.ids.main_navigation.remove_widget(widget.ids.bottom_navigation_desktop_2)
+        if DEVICE_TYPE == 'mobile' or DEVICE_TYPE == 'tablet':
+            widget.ids.main_navigation.remove_widget(widget.ids.bottom_navigation_desktop_1)
+
+    def show_example_snackbar(self, snack_type):
+        if snack_type == 'simple':
+            Snackbar(text="This is a snackbar!").show()
+        elif snack_type == 'button':
+            Snackbar(text="This is a snackbar", button_text="with a button!", button_callback=lambda *args: 2).show()
+        elif snack_type == 'verylong':
+            Snackbar(text="This is a very very very very very very very long snackbar!").show()
+
     '''
     def set_error_message(self, *args):
         if len(self.root.ids.text_field_error.text) == 2:
@@ -663,6 +579,22 @@ class KitchenSink(App):
 
     def on_stop(self):
         pass
+
+
+class HackedDemoNavDrawer(MDNavigationDrawer):
+    # DO NOT USE
+    def add_widget(self, widget, index=0):
+        if issubclass(widget.__class__, BaseListItem):
+            self._list.add_widget(widget, index)
+            if len(self._list.children) == 1:
+                widget._active = True
+                self.active_item = widget
+            # widget.bind(on_release=lambda x: self.panel.toggle_state())
+            widget.bind(on_release=lambda x: x._set_active(True, list=self))
+        elif issubclass(widget.__class__, NavigationDrawerHeaderBase):
+            self._header_container.add_widget(widget)
+        else:
+            super(MDNavigationDrawer, self).add_widget(widget, index)
 
 
 class AvatarSampleWidget(ILeftBody, Image):
