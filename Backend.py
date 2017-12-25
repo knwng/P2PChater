@@ -32,6 +32,7 @@ class LoginClient(protocol.Protocol):
             if data == 'lol':
                 self.factory.app.login_callback(True)
             else:
+                self.factory.app.userid = ''
                 self.factory.app.login_callback(False)
         else:
             if data == 'n':
@@ -111,9 +112,9 @@ class ChatClientFactory(protocol.ClientFactory):
 
 class RequestServer(protocol.Protocol):
     def dataReceived(self, data):
-        response = self.factory.app.handle_message(data)
-        if response:
-            self.transport.write(response)
+        self.factory.app.handle_chat_request(data)
+        # if response:
+        #     self.transport.write(response)
 
 
 class RequestServerFactory(protocol.Factory):

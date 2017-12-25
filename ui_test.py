@@ -2,7 +2,8 @@
 from Backend import *
 from config import *
 import time
-import os,sys, time
+import os, sys, time
+from os.path import sep, expanduser, isdir, dirname
 
 from kivy.app import App
 from kivy.lang import Builder
@@ -28,6 +29,9 @@ from kivymd.time_picker import MDTimePicker
 from kivymd.toolbar import Toolbar
 from kivymd.color_definitions import colors
 from kivymd.textfields import MDTextField
+from garden.filebrowser import FileBrowser
+from garden.qrcode import QRCodeWidget
+
 
 main_widget_kv = '''
 #:import Toolbar kivymd.toolbar.Toolbar
@@ -64,6 +68,7 @@ main_widget_kv = '''
 #:import MDThemePicker kivymd.theme_picker.MDThemePicker
 #:import MDBottomNavigation kivymd.tabs.MDBottomNavigation
 #:import MDBottomNavigationItem kivymd.tabs.MDBottomNavigationItem
+#:import QRCodeWidget kivy.garden.qrcode
 
 BoxLayout:
     orientation: 'vertical'
@@ -137,13 +142,43 @@ BoxLayout:
                     text: "Profile"
                     icon: 'alert'
                     id: profile
-                    BoxLayout:
+                    FloatLayout:
                         orientation: 'vertical'
-                        size_hint_y: None
-                        padding: dp(48)
-                        spacing: 10
-                        MDTextField:
-                            hint_text: "Hello again"   
+                        # size_hint: 1, 1
+                        FloatLayout:
+                            orientation: 'vertical'
+                            # size_hint: 1, 0.4
+                            # pos_hint: {'center_x': 0.5, 'center_y': 0.8}
+                            QRCodeWidget:
+                                id: qr
+                                data: ''
+                                pos_hint: {'center_x': 0.3, 'center_y': 0.6}
+                                size_hint: 0.4, 0.4
+                                show_border: False
+                            MDLabel:
+                                font_style: 'Headline'
+                                theme_text_color: 'Primary'
+                                text: "Make Friend with Me!"
+                                pos_hint: {'center_x': 0.7, 'center_y': 0.6}
+                                size_hint: 0.6, 0.4
+                                halign: 'center'
+                        FloatLayout:
+                            orientation: 'horizontal'
+                            size_hint: 1, 0.3
+                            pos_hint: {'center_x': 0.5, 'bottom': 0}
+                            MDRaisedButton:
+                                size: 3 * dp(48), dp(48)
+                                text: 'Change theme'
+                                on_release: MDThemePicker().open()
+                                opposite_colors: True
+                                pos_hint: {'center_x': 0.4, 'center_y': 0.5}
+                            MDRaisedButton:
+                                size: 3 * dp(48), dp(48)
+                                # center_x: self.parent.center_x
+                                text: 'Logout'
+                                opposite_colors: True
+                                md_bg_color: get_color_from_hex(colors['Red']['500'])
+                                pos_hint: {'center_x': 0.6, 'center_y': 0.5}
         Screen:
             name: 'chatroom'
             Toolbar:
@@ -163,6 +198,7 @@ BoxLayout:
                     icon: 'file'
                     pos_hint: {'left': 0.3, 'center_y': 0.5}
                     # disabled: disable_the_buttons.active
+                    on_release: app.send_file()
                 MDTextField:
                     id: chatroom_input
                     required: True
@@ -182,6 +218,9 @@ BoxLayout:
                 id: chatroom_msg
                 pos_hint: {'center_x': 0.5, 'top': 0.9}
                 size_hint: 1, 0.7
+        Screen:
+            name: 'filebrowser'
+            id: filebrowser
                                        
 '''
 
@@ -202,6 +241,7 @@ class HackedDemoNavDrawer(MDNavigationDrawer):
 
 
 class KitchenSink(App):
+    userid = ''
     theme_cls = ThemeManager()
     previous_date = ObjectProperty()
     title = "KivyMD Kitchen Sink"
@@ -248,17 +288,8 @@ class KitchenSink(App):
         return main_widget
 
     # Network
-    def comm2server(self, dst_host, dst_port):
-        reactor.connectTCP(dst_host, dst_port, LoginClientFactory(self))
-        return
 
-    def comm2friendlist(self, dst_host, dst_port):
-        reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
-        return
 
-    def comm2chat(self, dst_host, dst_port, idx):
-        reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
-        return
 
     def on_login_conn(self, conn):
         self.login_conn = conn
@@ -281,6 +312,7 @@ class KitchenSink(App):
             # self.login_conn.loseConnection()
             # del self.login_conn
             self.login_status = True
+            self.root.ids.qr.data = self.userid
             self.root.ids.scr_mngr.current = 'mainpage'
             self.get_friendlist()
             Clock.schedule_interval(self.get_friendlist, 1)
@@ -328,6 +360,10 @@ class KitchenSink(App):
     def back_to_mainpage(self, *args):
         self.root.ids.scr_mngr.current = 'mainpage'
         return
+
+    def handle_chat_request(self, data):
+        pass
+
 
     def show_friend_card(self):
         self.root.ids.ml.clear_widgets()
@@ -379,6 +415,30 @@ class KitchenSink(App):
                 i.msg.append([time.time(), 1, msg])
                 i.chat_client.write(msg)
 
+    def send_file(self):
+        client_name = self.root.ids.chatroom_toolbar.title.split(' ')[-1]
+        if sys.platform == 'win':
+            user_path = dirname(expanduser('~')) + sep + 'Documents'
+        else:
+            user_path = expanduser('~') + sep + 'Documents'
+
+        browser = FileBrowser(select_string='Select',
+                              favorites=[(user_path, 'Documents')])
+        browser.bind(
+                on_success=lambda x: self._fbrowser_success(browser, client_name),
+                on_canceled=self._fbrowser_canceled)
+        self.root.ids.filebrowser.add_widget(browser)
+        self.root.ids.scr_mngr.current = 'filebrowser'
+        return
+
+    def _fbrowser_canceled(self, instance):
+        print 'cancelled, Close self.'
+
+    def _fbrowser_success(self, instance, client_name):
+        print('Send file {} to {}'.format(instance.selection, client_name))
+
+        # print instance.selection
+
     def bottom_navigation_remove_mobile(self, widget):
         # Removes some items from bottom-navigation demo when on mobile
         if DEVICE_TYPE == 'mobile':
@@ -403,8 +463,32 @@ class KitchenSink(App):
         #     print('Current Widget: {}'.format(i))
         if username == '2014010622' and password == 'net2017':
             self.login(username, password)
+            self.userid = username
         else:
             self.show_login_error_dialog()
+
+
+
+    # connection_wrapper
+    def comm2server(self, dst_host, dst_port):
+        reactor.connectTCP(dst_host, dst_port, LoginClientFactory(self))
+        return
+
+    def comm2friendlist(self, dst_host, dst_port):
+        reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
+        return
+
+    def comm2chat(self, dst_host, dst_port, idx):
+        reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
+        return
+
+    # dialogs
+
+
+
+
+
+
 
     def show_offline_error_dialog(self):
         content = MDLabel(font_style='Body1',
@@ -465,7 +549,7 @@ class KitchenSink(App):
     def connection_error_dialog_dismiss(self):
         self.connection_error_dialog.dismiss()
         self.comm2server(self.host, self.server_port)
-        self.comm2friend(self.host, self.server_port)
+        self.comm2friendlist(self.host, self.server_port)
         reactor.listenTCP(self.listen_port, RequestServerFactory(self))
 
     def show_example_dialog(self):
@@ -571,6 +655,8 @@ class KitchenSink(App):
         else:
             self.root.ids.text_field_error.error = False
     '''
+
+
 
     def on_pause(self):
         return True
