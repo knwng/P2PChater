@@ -1,9 +1,8 @@
-import numpy as np
 from config import *
 import socket
 import time
-from time import ctime
 import re
+import os
 socket.setdefaulttimeout(TIMEOUT)
 from kivy.support import install_twisted_reactor
 install_twisted_reactor()
@@ -34,13 +33,13 @@ class LoginClient(protocol.Protocol):
             else:
                 self.factory.app.userid = ''
                 self.factory.app.login_callback(False)
-        else:
-            if data == 'n':
-                self.factory.app.proc_friend_list(False)
-            elif re.match(pattern_ip, data):
-                self.factory.app.proc_friend_list(True, data)
-            else:
-                print('False query {} for friend status'.format(data))
+        # else:
+        #     if data == 'n':
+        #         self.factory.app.proc_friend_list(False)
+        #     elif re.match(pattern_ip, data):
+        #         self.factory.app.proc_friend_list(True, data)
+        #     else:
+        #         print('False query {} for friend status'.format(data))
 
 class LoginClientFactory(protocol.ClientFactory):
     protocol = LoginClient
@@ -75,38 +74,101 @@ class FriendlistClientFactory(protocol.ClientFactory):
         self.app = app
 
 
-class ChatClient(protocol.Protocol):
-    def __init__(self, idx):
-        self.idx = idx
-        self.name = self.factory.app.friend_list[self.idx].name
+class FileServer(protocol.Protocol):
 
+    def dataReceived(self, data):
+        # self.factory.app.handle_chat_request(data)
+        # in format FILE_userid_data
+        if data.startswith('FILE'):
+            userid = data.split('_')[1]
+            if re.match(pattern_id, userid) is not None:
+                if userid in [x for x in self.factory.app.filerecv_flag]:
+                    idx = [x for x in self.factory.app.filerecv_flag].index(userid)
+                    filename = self.factory.app.filerecv_flag[idx]
+                    if os.path.exists(os.path.join(self.factory.app.pwd, userid)) is None:
+                        os.system('mkdir -p {}'.format(os.path.join(self.factory.app.pwd, userid)))
+                    with open(os.path.join(self.factory.app.pwd, userid, filename), 'wb') as f:
+                        f.write(data[16:])
+                else:
+                    print('{} is not in friend list'.format(userid))
+            else:
+                print('{} is illegal'.format(userid))
+        else:
+            print('data are not start with FILE')
+
+
+class FileServerFactory(protocol.Factory):
+    protocol = FileServer
+
+    def __init__(self, app):
+        self.app = app
+
+
+class FileClient(protocol.Protocol):
     def connectionMade(self):
         # send 'CONNECT' message and
         # force TCP flush by appending a line feed ('\n')
         # self.transport.write('CONNECT\n')
-        self.factory.app.friend_list[self.idx].chat_client = self.transport
-        # self.factory.app.on_chatclient_conn(self.transport, self.idx)
+        self.factory.app.on_file_conn(self.transport)
 
     def dataReceived(self, data):
-        print('Client {} received msg: {}'.format(self.name, data))
-        # 0 for in-msg, 1 for out-msg
-        self.factory.app.friend_list[self.idx].msg.append([time.time(), 0, data])
-        return
+        pass
 
 
-class ChatClientFactory(protocol.ClientFactory):
-    protocol = ChatClient
+class FileClientFactory(protocol.ClientFactory):
+    protocol = FileClient
 
-    def __init__(self, app, idx):
+    def __init__(self, app):
         self.app = app
-        self.idx = idx
 
-    def buildProtocol(self, addr):
-        bot = ChatClient(self.id)
-        bot.factory = self
-        # self.bot = bot
-        # self.connection_attempts = 0
-        return bot
+
+class ChatClient(protocol.DatagramProtocol):
+
+    def __init__(self, app):
+        # super(EchoClient, self).__init__()
+        print('app instance {}'.format(app))
+        self.app = app
+
+    def startProtocol(self):
+        self.app.on_chatclient_connection(self.transport)
+
+    def datagramReceived(self, data, address):
+        # print('Receive message [{}] from user [{}] from ip [{}]'.format(data[14:-1], data.split('_')[1], address))
+        print('Receive message {}'.format(data))
+        if data.startswith('MSG'):
+            # receive a msg, in format MSG_userid_data
+            userid = data.split('_')[1]
+            if re.match(pattern_id, userid):
+                # format check passed
+                for idx, i in enumerate(self.app.friend_list):
+                    if i.name == userid:
+                        # [timestamp, 0, data] 0 for in-msg
+                        self.app.friend_list[idx].msg.append([time.time(), 0, data[15:]])
+                        # print('Friend list after receiving: {}'.format([x.display() for x in self.app.friend_list]))
+                        i.unread += 1
+                        self.app.update_chat_window()
+                        return
+        elif data.startswith('FILE'):
+            # FILE Request or FILE ACK
+            # in format FILE_userid_{REQUEST_filename, ACK}
+            userid = data.split('_')[1]
+            if re.match(pattern_id, userid):
+                if data.split('_')[2] == 'REQUEST':
+                    # REQUEST to send file
+                    filename = data[19:]
+                    self.factory.app.show_error_dialog('file_request', userid, filename)
+                    pass
+                elif data.split('_')[2] == 'ACK':
+                    # ACK to receive file, start transfer
+
+                    pass
+                elif data.split('_')[2] == 'REFUSE':
+                    # your sending request are refused
+                    self.factory.app.show_error_dialog('refused')
+                    pass
+                else:
+                    print('FILE type neither REQUEST nor ACK')
+        print('Wrong message format')
 
 
 class RequestServer(protocol.Protocol):
@@ -123,131 +185,144 @@ class RequestServerFactory(protocol.Factory):
         self.app = app
 
 
-class UDPChatClient(protocol.DatagramProtocol):
+# class Comm2ServerWidget(Widget):
+#     def __init__(self, dst_ip, dst_port, account, passwd='net2017'):
+#         self.server_address = (dst_ip, dst_port)
+#         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         # self.server_sock.setblocking(False)
+#         # self.server_sock.settimeout(5)       # set timeout to 5s
+#         self.account = account
+#         self.passwd = passwd
+#         self.friend_list = []
+#         self.chatting_port = 12500      # port for receiving chatting request
+#         Clock.schedual_interval(self.update_friend_status(), 1)
+#         Clock.schedual_interval(self.listen_chatting_request(), 0.1)
+#         print('Socket name: ', self.server_sock.getsockname())
+#
+#     def login(self):
+#         try:
+#             self.server_sock.connect(self.address)
+#         except socket.gaierror, e:
+#             print 'Address-related error connecting to server: {}'.format(e)
+#             return None
+#         except socket.error, e:
+#             print 'Connection Error: {}'.format(e)
+#             # self.server_sock.close()
+#             return None
+#         except socket.timeout, e:
+#             print 'Connection Timeout: {}'.format(e)
+#             return None
+#         try:
+#             self.server_sock.sendall('{}_{}'.format(self.account, self.passwd))
+#         except socket.error, e:
+#             print 'Error sending data: {}'.format(e)
+#             return None
+#         except socket.timeout, e:
+#             print 'Sending Timeout: {}'.format(e)
+#             return None
+#         try:
+#             reply = self.server_sock.recv(BUFFERSIZE)
+#         except socket.timeout, e:
+#             print 'Receiving Timeout: {}'.format(e)
+#             return None
+#         # print('reply: ', reply)
+#         return reply == 'lol'
+#
+#     def logout(self):
+#         # self.server_sock.connect(self.address)
+#         self.server_sock.sendall('logout'+self.account)
+#         reply = self.server_sock.recv(BUFFERSIZE)
+#         # print('reply: ', reply)
+#         self.server_sock.close()
+#         return reply == 'loo'
+#
+#     def query(self, faccount):
+#         # self.server_sock.connect(self.address)
+#         self.server_sock.sendall('q'+faccount)
+#         reply = self.server_sock.recv(BUFFERSIZE)
+#         print('reply: ', reply)
+#         # self.server_sock.close()
+#         if reply == 'n':
+#             return None
+#         return reply
+#
+#     def get_friend_status(self):
+#         with file(friend_list_fn, 'r') as f:
+#             flt = f.readlines()
+#         for i in flt:
+#             self.friend_list.append(Friends(i, self.query(i)))
+#
+#     def update_friend_status(self):
+#         for i in self.friend_list:
+#             i.ip = self.query(i.name)
+#         return
+#
+#     def setup_listen_socket(self):
+#         self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         self.listen_sock.bind((''. LISTENPORT))
+#         self.listen_sock.listen(10)
+#
+#     def listen_chatting_request(self):
+#         # addr in format (ip, port)
+#         client_sock, addr = self.listen_sock.accept()
+#         idx = None
+#         for i in range(len(self.friend_list)):
+#             if self.friend_list[i].ip == addr[0]:
+#                 idx = i
+#                 break
+#         if idx is None:
+#             print("Can't find ip: {} in friend_list".format(addr[0]))
+#             return False
+#         client_sock.settimeout(TIMEOUT)
+#         data = client_sock.recv(BUFFERSIZE)
+#         # data should in format: request
+#         if not data.startswith('request'):
+#             print('Invalid chatting request')
+#             return False
+#         self.friend_list[i].in_use = True
+#         self.friend_list[i].chat_client = CommP2P(1, addr[0], int(float(addr[1])))
+#         return True
+#
+#     def get_valid_port(self):
+#         s = socket.socket()
+#         s.bind(('', 0))
+#         port = s.getsockname()[1]
+#         s.close()
+#         return port
 
-    def __init__(self, app):
-        # super(EchoClient, self).__init__()
-        print('app instance {}'.format(app))
-        self.app = app
 
-    def startProtocol(self):
-        self.transport.connect('127.0.0.1', 8000)
-        self.app.on_udp_connection(self.transport)
-
-    def datagramReceived(self, data, address):
-        print('Receive message [{}] from [{}]'.format(data, address))
-        # self.factory.app.print_message(data.decode('utf-8'))
-
-
-
-
-
-
-class Comm2ServerWidget(Widget):
-    def __init__(self, dst_ip, dst_port, account, passwd='net2017'):
-        self.server_address = (dst_ip, dst_port)
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # self.server_sock.setblocking(False)
-        # self.server_sock.settimeout(5)       # set timeout to 5s
-        self.account = account
-        self.passwd = passwd
-        self.friend_list = []
-        self.chatting_port = 12500      # port for receiving chatting request
-        Clock.schedual_interval(self.update_friend_status(), 1)
-        Clock.schedual_interval(self.listen_chatting_request(), 0.1)
-        print('Socket name: ', self.server_sock.getsockname())
-
-    def login(self):
-        try:
-            self.server_sock.connect(self.address)
-        except socket.gaierror, e:
-            print 'Address-related error connecting to server: {}'.format(e)
-            return None
-        except socket.error, e:
-            print 'Connection Error: {}'.format(e)
-            # self.server_sock.close()
-            return None
-        except socket.timeout, e:
-            print 'Connection Timeout: {}'.format(e)
-            return None
-        try:
-            self.server_sock.sendall('{}_{}'.format(self.account, self.passwd))
-        except socket.error, e:
-            print 'Error sending data: {}'.format(e)
-            return None
-        except socket.timeout, e:
-            print 'Sending Timeout: {}'.format(e)
-            return None
-        try:
-            reply = self.server_sock.recv(BUFFERSIZE)
-        except socket.timeout, e:
-            print 'Receiving Timeout: {}'.format(e)
-            return None
-        # print('reply: ', reply)
-        return reply == 'lol'
-
-    def logout(self):
-        # self.server_sock.connect(self.address)
-        self.server_sock.sendall('logout'+self.account)
-        reply = self.server_sock.recv(BUFFERSIZE)
-        # print('reply: ', reply)
-        self.server_sock.close()
-        return reply == 'loo'
-
-    def query(self, faccount):
-        # self.server_sock.connect(self.address)
-        self.server_sock.sendall('q'+faccount)
-        reply = self.server_sock.recv(BUFFERSIZE)
-        print('reply: ', reply)
-        # self.server_sock.close()
-        if reply == 'n':
-            return None
-        return reply
-
-    def get_friend_status(self):
-        with file(friend_list_fn, 'r') as f:
-            flt = f.readlines()
-        for i in flt:
-            self.friend_list.append(Friends(i, self.query(i)))
-
-    def update_friend_status(self):
-        for i in self.friend_list:
-            i.ip = self.query(i.name)
-        return
-
-    def setup_listen_socket(self):
-        self.listen_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listen_sock.bind((''. LISTENPORT))
-        self.listen_sock.listen(10)
-
-    def listen_chatting_request(self):
-        # addr in format (ip, port)
-        client_sock, addr = self.listen_sock.accept()
-        idx = None
-        for i in range(len(self.friend_list)):
-            if self.friend_list[i].ip == addr[0]:
-                idx = i
-                break
-        if idx is None:
-            print("Can't find ip: {} in friend_list".format(addr[0]))
-            return False
-        client_sock.settimeout(TIMEOUT)
-        data = client_sock.recv(BUFFERSIZE)
-        # data should in format: request
-        if not data.startswith('request'):
-            print('Invalid chatting request')
-            return False
-        self.friend_list[i].in_use = True
-        self.friend_list[i].chat_client = CommP2P(1, addr[0], int(float(addr[1])))
-        return True
-
-    def get_valid_port(self):
-        s = socket.socket()
-        s.bind(('', 0))
-        port = s.getsockname()[1]
-        s.close()
-        return port
-
+# class ChatClient(protocol.Protocol):
+#     def __init__(self, idx):
+#         self.idx = idx
+#         self.name = self.factory.app.friend_list[self.idx].name
+#
+#     def connectionMade(self):
+#         # send 'CONNECT' message and
+#         # force TCP flush by appending a line feed ('\n')
+#         # self.transport.write('CONNECT\n')
+#         self.factory.app.friend_list[self.idx].chat_client = self.transport
+#         # self.factory.app.on_chatclient_conn(self.transport, self.idx)
+#
+#     def dataReceived(self, data):
+#         print('Client {} received msg: {}'.format(self.name, data))
+#         # 0 for in-msg, 1 for out-msg
+#         self.factory.app.friend_list[self.idx].msg.append([time.time(), 0, data])
+#         return
+#
+#
+# class ChatClientFactory(protocol.ClientFactory):
+#     protocol = ChatClient
+#
+#     def __init__(self, app, idx):
+#         self.app = app
+#         self.idx = idx
+#
+#     def buildProtocol(self, addr):
+#         bot = ChatClient(self.id)
+#         bot.factory = self
+#         # self.bot = bot
+#         # self.connection_attempts = 0
+#         return bot
 
 
 class CommP2PWidget(Widget):
@@ -265,15 +340,15 @@ class CommP2PWidget(Widget):
         # flag = 1 for user himself, 2 for his friend
         self.msg = []
 
-    def send_msg(self, data):
-        self.msg.append([ctime(), data, 1])
-        self.client_sock.sendall(data)
-        return
-
-    def recv_msg(self):
-        data = self.sock.recv(BUFFERSIZE)
-        self.msg.append(list(data).append(2))
-        return
+    # def send_msg(self, data):
+    #     self.msg.append([ctime(), data, 1])
+    #     self.client_sock.sendall(data)
+    #     return
+    #
+    # def recv_msg(self):
+    #     data = self.sock.recv(BUFFERSIZE)
+    #     self.msg.append(list(data).append(2))
+    #     return
 
     def send_file(self, filename):
         pass
@@ -403,15 +478,15 @@ class CommP2P(object):
         # flag = 1 for user himself, 2 for his friend
         self.msg = []
 
-    def send_msg(self, data):
-        self.msg.append([ctime(), data, 1])
-        self.client_sock.sendall(data)
-        return
+    # def send_msg(self, data):
+    #     self.msg.append([ctime(), data, 1])
+    #     self.client_sock.sendall(data)
+    #     return
 
-    def recv_msg(self):
-        data = self.sock.recv(BUFFERSIZE)
-        self.msg.append(list(data).append(2))
-        return
+    # def recv_msg(self):
+    #     data = self.sock.recv(BUFFERSIZE)
+    #     self.msg.append(list(data).append(2))
+    #     return
 
     def send_file(self, filename):
         pass

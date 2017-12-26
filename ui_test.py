@@ -1,28 +1,28 @@
 # -*- coding: utf-8 -*-
 from Backend import *
 from config import *
+from ui import *
 import time
 import os, sys, time
 from os.path import sep, expanduser, isdir, dirname
+from numpy import argsort
 
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.properties import ObjectProperty, StringProperty
-from kivy.uix.image import Image
 from kivy.uix.screenmanager import Screen
 from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
+from kivy.uix.boxlayout import BoxLayout
 
 from kivymd.bottomsheet import MDListBottomSheet, MDGridBottomSheet
-from kivymd.button import MDIconButton
+from kivymd.card import MDCard, MDSeparator
 from kivymd.date_picker import MDDatePicker
 from kivymd.dialog import MDDialog
 from kivymd.label import MDLabel
-from kivymd.list import ILeftBody, ILeftBodyTouch, IRightBodyTouch, BaseListItem, OneLineListItem, TwoLineListItem
+from kivymd.list import OneLineListItem
 from kivymd.material_resources import DEVICE_TYPE
-from kivymd.navigationdrawer import MDNavigationDrawer, NavigationDrawerHeaderBase, NavigationDrawerIconButton
-from kivymd.selectioncontrols import MDCheckbox
 from kivymd.snackbar import Snackbar
 from kivymd.theming import ThemeManager
 from kivymd.time_picker import MDTimePicker
@@ -206,6 +206,7 @@ BoxLayout:
                     color_mode: 'accent'
                     pos_hint: {'center_x': 0.5, 'center_y': 0.5}
                     size_hint: 0.6, 0.9
+                    on_text_validate: app.send_msg()
                 MDRaisedButton:
                     text: "Send"
                     elevation_normal: 2
@@ -213,11 +214,19 @@ BoxLayout:
                     pos_hint: {'right': 0.96, 'center_y': 0.5}
                     size_hint: 0.1, 0.4
                     on_release: app.send_msg()
-            ScrollView:
-                do_scroll_x: False
-                id: chatroom_msg
+            BoxLayout:
+                orientation: 'vertical'
                 pos_hint: {'center_x': 0.5, 'top': 0.9}
                 size_hint: 1, 0.7
+                ScrollView:
+                    do_scroll_x: False
+                    BoxLayout:
+                        orientation: 'vertical'
+                        id: chatroom_msg
+                        size_hint_y: None
+                        height: dp(1000)
+                        padding: dp(10)
+                        spacing: dp(20)
         Screen:
             name: 'filebrowser'
             id: filebrowser
@@ -234,12 +243,15 @@ class KitchenSink(App):
     msg = StringProperty('')
     login_conn = None
     friendlist_conn = None
+    chat_conn = None
     friend_list = None
     curr_proc_friend = None
     login_status = False
     host = '166.111.140.14'
     server_port = 8000
-    listen_port = 12500
+    msg_port = 12500
+    file_port = 12600
+    message_card = None
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
@@ -270,7 +282,7 @@ class KitchenSink(App):
 
         self.comm2server(self.host, self.server_port)
         self.comm2friendlist(self.host, self.server_port)
-        reactor.listenTCP(self.listen_port, RequestServerFactory(self))
+        reactor.listenUDP(self.msg_port, ChatClient(self))
         return main_widget
 
     # Network
@@ -336,13 +348,13 @@ class KitchenSink(App):
         self.root.ids.scr_mngr.current = 'mainpage'
         return
 
-    def handle_chat_request(self, data):
-        """
-
-        :param data: request_message, in format chat_userid_port, like chat_2014010622_16430
-        :return:
-        """
-        pass
+    # def handle_chat_request(self, data):
+    #     """
+    #
+    #     :param data: request_message, in format chat_userid_port, like chat_2014010622_16430
+    #     :return:
+    #     """
+    #     pass
 
 
     def show_friend_card(self):
@@ -355,7 +367,7 @@ class KitchenSink(App):
                                              on_release=self.chatwith)
                 # iconwidget = IconLeftSampleWidget(icon='account', id='icon_{}'.format(i.name))
                 iconwidget = IconLeftSampleWidget(icon='account')
-                listwidget.add_widget(iconwidget)
+                # listwidget.add_widget(iconwidget)
                 self.root.ids.ml.add_widget(listwidget)
             else:
                 listwidget = OneLineListItem(text=i.name,
@@ -363,7 +375,7 @@ class KitchenSink(App):
                                              on_release=self.chatwith)
                 # iconwidget = IconLeftSampleWidget(icon='account-off', id='icon_{}'.format(i.name))
                 iconwidget = IconLeftSampleWidget(icon='account-off')
-                listwidget.add_widget(iconwidget)
+                # listwidget.add_widget(iconwidget)
                 self.root.ids.ml.add_widget(listwidget)
         return
 
@@ -374,26 +386,66 @@ class KitchenSink(App):
                 if self.friend_list[i].is_online is False:
                     self.show_error_dialog('offline')
                     return
-                elif self.friend_list[i].is_use is False:
-                    self.friend_list[i].is_use = True
+                # elif self.friend_list[i].is_use is False:
+                #     self.friend_list[i].is_use = True
                     # self.curr_generate_client = i
-                    self.comm2chat(self.host, self.listen_port, i)
-                self.show_chat_window(self.friend_list[i].name)
+                    # self.comm2chat(self.host, self.listen_port, i)
+                self.show_chat_window(i)
                 return
 
-    def show_chat_window(self, id):
-        self.root.ids.chatroom_toolbar.title = 'Chat With {}'.format(id)
+    def show_chat_window(self, idx):
+        self.root.ids.chatroom_toolbar.title = 'Chat With {}'.format(self.friend_list[idx].name)
+        self.root.ids.chatroom_msg.clear_widgets()
+        # sort msg by timestamp
+        print('MSG from {}: [{}]'.format(self.friend_list[idx].name, self.friend_list[idx].msg))
+        sorted_idx = argsort([x[0] for x in self.friend_list[idx].msg])
+        print('MSG_Card id: [{}]'.format(self.message_card.children))
+        for i in sorted_idx:
+            if self.friend_list[idx].msg[i][1] == 0:
+                # income message
+                self.left_card(self.friend_list[idx].name, self.friend_list[idx].msg[i][2])
+            else:
+                # output message
+                self.right_card(self.friend_list[idx].name, self.friend_list[idx].msg[i][2])
         self.root.ids.scr_mngr.current = 'chatroom'
         return
 
+    def left_card(self, title, body):
+        widget = MessageCard().get_card()
+        print('ids: {}'.format(widget.ids))
+        widget.ids['msgcard_main'].pos_hint = {'left': 0}
+        widget.ids['msgcard_main'].md_bg_color = get_color_from_hex(colors['Blue']['200'])
+        widget.ids['msgcard_title'].text = title
+        widget.ids['msgcard_body'].text = body
+        self.root.ids.chatroom_msg.add_widget(widget)
+        pass
+
+    def right_card(self, title, body):
+        widget = MessageCard().get_card()
+        print('ids: {}'.format(widget.ids))
+        widget.ids['msgcard_main'].pos_hint = {'right': 1}
+        widget.ids['msgcard_main'].md_bg_color = get_color_from_hex(colors['Green']['200'])
+        widget.ids['msgcard_title'].text = title
+        widget.ids['msgcard_body'].text = body
+        self.root.ids.chatroom_msg.add_widget(widget)
+        pass
+
     def send_msg(self):
         client_name = self.root.ids.chatroom_toolbar.title.split(' ')[-1]
-        for i in self.friend_list:
+        for idx, i in enumerate(self.friend_list):
             if i.name == client_name:
                 msg = self.root.ids.chatroom_input.text
                 # 0 for in-msg, 1 for out-msg
                 i.msg.append([time.time(), 1, msg])
-                i.chat_client.write(msg)
+                if self.chat_conn is not None:
+                    # self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), (i.ip, self.msg_port))
+                    self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', 8000))
+                    self.root.ids.chatroom_input.text = ''
+                else:
+                    print('UDP Client Not setup, cannot chat')
+                if self.root.ids.scr_mngr.current == 'chatroom':
+                    self.show_chat_window(idx)
+                # i.chat_client.write(msg)
 
     def send_file(self):
         client_name = self.root.ids.chatroom_toolbar.title.split(' ')[-1]
@@ -442,9 +494,9 @@ class KitchenSink(App):
         reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
         return
 
-    def comm2chat(self, dst_host, dst_port, idx):
-        reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
-        return
+    # def comm2chat(self, dst_host, dst_port, idx):
+    #     reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
+    #     return
 
     # connection handle
     def on_login_conn(self, conn):
@@ -453,8 +505,11 @@ class KitchenSink(App):
     def on_friendlist_conn(self, conn):
         self.friendlist_conn = conn
 
-    def on_chatclient_conn(self, conn, idx):
-        self.friend_list[idx].chat_client = conn
+    # def on_chatclient_conn(self, conn, idx):
+    #     self.friend_list[idx].chat_client = conn
+
+    def on_chatclient_connection(self, conn):
+        self.chat_conn = conn
 
     # dialogs
     def show_error_dialog(self, error_type):
@@ -579,34 +634,6 @@ class KitchenSink(App):
 
     def on_stop(self):
         pass
-
-
-class HackedDemoNavDrawer(MDNavigationDrawer):
-    # DO NOT USE
-    def add_widget(self, widget, index=0):
-        if issubclass(widget.__class__, BaseListItem):
-            self._list.add_widget(widget, index)
-            if len(self._list.children) == 1:
-                widget._active = True
-                self.active_item = widget
-            # widget.bind(on_release=lambda x: self.panel.toggle_state())
-            widget.bind(on_release=lambda x: x._set_active(True, list=self))
-        elif issubclass(widget.__class__, NavigationDrawerHeaderBase):
-            self._header_container.add_widget(widget)
-        else:
-            super(MDNavigationDrawer, self).add_widget(widget, index)
-
-
-class AvatarSampleWidget(ILeftBody, Image):
-    pass
-
-
-class IconLeftSampleWidget(ILeftBodyTouch, MDIconButton):
-    pass
-
-
-class IconRightSampleWidget(IRightBodyTouch, MDCheckbox):
-    pass
 
 
 if __name__ == '__main__':
