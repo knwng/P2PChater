@@ -268,8 +268,10 @@ class KitchenSink(App):
     widget_shape = None
     # [0] for userid
     # [1] for filename
-    # [2] for filepath
     filerecv_flag = []
+    # [0] for userid
+    # [1] for filepath
+    filesend_flag = []
     pwd = ''
 
     menu_items = [
@@ -501,15 +503,26 @@ class KitchenSink(App):
                               favorites=[(user_path, 'Documents')])
         browser.bind(
                 on_success=lambda x: self._fbrowser_success(browser, client_name),
-                on_canceled=self._fbrowser_canceled)
+                on_canceled=lambda x: self._fbrowser_canceled(browser))
         self.root.ids.filebrowser.add_widget(browser)
         self.root.ids.scr_mngr.current = 'filebrowser'
         return
 
     def _fbrowser_canceled(self, instance):
+        self.root.ids.scr_mngr.current = 'chatroom'
         print 'cancelled, Close self.'
 
     def _fbrowser_success(self, instance, client_name):
+        self.root.ids.scr_mngr.current = 'chatroom'
+        self.filesend_flag.append([client_name, instance.selection])
+        for idx, i in enumerate(self.friend_list):
+            if i.name == client_name and i.is_online:
+                self.chat_conn.write('FILE_{}_REQUEST_{}'.format(client_name,
+                                                                 os.path.basename(instance.selection)),
+                                     (i.ip, self.msg_port))
+                reactor.connectTCP(i.ip, self.file_port, FileClientFactory(self))
+                break
+        # Send Request
         print('Send file {} to {}'.format(instance.selection, client_name))
 
         # print instance.selection
@@ -617,7 +630,10 @@ class KitchenSink(App):
         elif error_type == 'file_request_ok':
             # Send ACK to friend, in format
             self.filerecv_flag.append([userid, filename])
-            self.chat_conn.write('FILE_{}_ACK'.format(self.userid))
+            for i in self.friend_list:
+                if i.name == userid and i.is_online:
+                    self.chat_conn.write('FILE_{}_ACK'.format(self.userid), (i.ip, self.msg_port))
+                    break
         self.error_dialog.dismiss()
 
     def get_time_picker_data(self, instance, time):

@@ -156,15 +156,35 @@ class ChatClient(protocol.DatagramProtocol):
                 if data.split('_')[2] == 'REQUEST':
                     # REQUEST to send file
                     filename = data[19:]
-                    self.factory.app.show_error_dialog('file_request', userid, filename)
+                    self.app.show_error_dialog('file_request', userid, filename)
                     pass
                 elif data.split('_')[2] == 'ACK':
                     # ACK to receive file, start transfer
-
+                    # send file in format FILE_userid_data
+                    # filesend_flag: [userid, filepath]
+                    if userid in [x[0] for x in self.app.filesend_flag]:
+                        idx = [x[0] for x in self.app.filesend_flag].index(userid)
+                        filepath = self.app.filesend_flag[idx][1]
+                        self.app.filesend_flag.del(idx)
+                        for i in self.app.friend_list:
+                            if userid == i.name and i.is_online:
+                                with open(filepath, 'rb') as f:
+                                    filedata = f.read()
+                                    if self.app.file_conn:
+                                        self.app.file_conn.write('FILE_{}_{}'.format(userid, filedata))
+                                    else:
+                                        print('file conn are lost')
+                            else:
+                                print('userid {} is wrong or is not online'.format(userid))
+                            break
+                    else:
+                        print('{} are not in file send queue'.format(userid))
                     pass
                 elif data.split('_')[2] == 'REFUSE':
                     # your sending request are refused
-                    self.factory.app.show_error_dialog('refused')
+                    self.app.file_conn.loseConnection()
+                    del self.app.file_conn
+                    self.app.show_error_dialog('refused')
                     pass
                 else:
                     print('FILE type neither REQUEST nor ACK')
