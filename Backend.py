@@ -33,6 +33,11 @@ class LoginClient(protocol.Protocol):
             else:
                 self.factory.app.userid = ''
                 self.factory.app.login_callback(False)
+        else:
+            if data == 'loo':
+                self.factory.app.logout_callback(True)
+            else:
+                self.factory.app.logout_callback(False)
         # else:
         #     if data == 'n':
         #         self.factory.app.proc_friend_list(False)
@@ -155,8 +160,8 @@ class ChatClient(protocol.DatagramProtocol):
             if re.match(pattern_id, userid):
                 if data.split('_')[2] == 'REQUEST':
                     # REQUEST to send file
-                    filename = data[19:]
-                    self.app.show_error_dialog('file_request', userid, filename)
+                    filename = data[24:]
+                    self.app.show_dialog('file_request', userid, filename)
                     pass
                 elif data.split('_')[2] == 'ACK':
                     # ACK to receive file, start transfer
@@ -165,7 +170,7 @@ class ChatClient(protocol.DatagramProtocol):
                     if userid in [x[0] for x in self.app.filesend_flag]:
                         idx = [x[0] for x in self.app.filesend_flag].index(userid)
                         filepath = self.app.filesend_flag[idx][1]
-                        self.app.filesend_flag.del(idx)
+                        self.app.filesend_flag.remove(self.app.filesend_flag[idx])
                         for i in self.app.friend_list:
                             if userid == i.name and i.is_online:
                                 with open(filepath, 'rb') as f:
@@ -184,11 +189,11 @@ class ChatClient(protocol.DatagramProtocol):
                     # your sending request are refused
                     self.app.file_conn.loseConnection()
                     del self.app.file_conn
-                    self.app.show_error_dialog('refused')
+                    self.app.show_dialog('refused')
                     pass
                 else:
                     print('FILE type neither REQUEST nor ACK')
-        print('Wrong message format')
+        return
 
 
 class RequestServer(protocol.Protocol):

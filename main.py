@@ -135,8 +135,13 @@ BoxLayout:
                         size_hint_y: None
                         padding: dp(48)
                         spacing: 10
-                        MDTextField:
-                            hint_text: "You can put any widgets here"
+                        MDLabel:
+                            font_style: 'Headline'
+                            theme_text_color: 'Primary'
+                            text: "Coming Soon"
+                            # pos_hint: {'center_x': 0.7, 'center_y': 0.6}
+                            # size_hint: 0.6, 0.4
+                            halign: 'center'
                 MDBottomNavigationItem:
                     name: 'Profile'
                     text: "Profile"
@@ -168,17 +173,25 @@ BoxLayout:
                             pos_hint: {'center_x': 0.5, 'bottom': 0}
                             MDRaisedButton:
                                 size: 3 * dp(48), dp(48)
+                                # center_x: self.parent.center_x
+                                text: 'Add Friend'
+                                # opposite_colors: True
+                                pos_hint: {'center_x': 0.3, 'center_y': 0.5}
+                                on_release: app.add_friend()
+                            MDRaisedButton:
+                                size: 3 * dp(48), dp(48)
                                 text: 'Change theme'
                                 on_release: MDThemePicker().open()
                                 opposite_colors: True
-                                pos_hint: {'center_x': 0.4, 'center_y': 0.5}
+                                pos_hint: {'center_x': 0.5, 'center_y': 0.5}
                             MDRaisedButton:
                                 size: 3 * dp(48), dp(48)
                                 # center_x: self.parent.center_x
                                 text: 'Logout'
                                 opposite_colors: True
                                 md_bg_color: get_color_from_hex(colors['Red']['500'])
-                                pos_hint: {'center_x': 0.6, 'center_y': 0.5}
+                                pos_hint: {'center_x': 0.7, 'center_y': 0.5}
+                                on_release: app.logout()
         Screen:
             name: 'chatroom'
             FloatLayout:
@@ -314,7 +327,7 @@ class KitchenSink(App):
         if self.login_conn:
             self.login_conn.write('{}_{}'.format(username, password).encode('utf-8'))
         else:
-            self.show_error_dialog('connection')
+            self.show_dialog('connection')
         return
 
     def login_callback(self, FLAG):
@@ -328,7 +341,24 @@ class KitchenSink(App):
             Clock.schedule_interval(self.get_friendlist, 1)
             # Clock.schedule_interval(self.update_chat_window, 0.5)
         else:
-            self.show_error_dialog('connection')
+            self.show_dialog('connection')
+
+    def logout(self):
+        self.login_conn.write('logout{}'.format(self.userid))
+        pass
+
+    def logout_callback(self, FLAG):
+        if FLAG:
+            self.root.ids.username.text = ''
+            self.root.ids.password.text = ''
+            self.login_status = False
+            self.root.ids.scr_mngr.current = 'login'
+        else:
+            self.show_dialog('logout')
+
+    def add_friend(self):
+
+        pass
 
     def get_friendlist(self, *args):
         if self.friend_list is None:
@@ -405,7 +435,7 @@ class KitchenSink(App):
         for i in range(len(self.friend_list)):
             if self.friend_list[i].name == instance.text:
                 if self.friend_list[i].is_online is False:
-                    self.show_error_dialog('offline')
+                    self.show_dialog('offline')
                     return
                 # elif self.friend_list[i].is_use is False:
                 #     self.friend_list[i].is_use = True
@@ -513,17 +543,20 @@ class KitchenSink(App):
         print 'cancelled, Close self.'
 
     def _fbrowser_success(self, instance, client_name):
+        print('Send file {} to {}'.format(instance.selection, client_name))
         self.root.ids.scr_mngr.current = 'chatroom'
         self.filesend_flag.append([client_name, instance.selection])
         for idx, i in enumerate(self.friend_list):
             if i.name == client_name and i.is_online:
                 self.chat_conn.write('FILE_{}_REQUEST_{}'.format(client_name,
-                                                                 os.path.basename(instance.selection)),
-                                     (i.ip, self.msg_port))
+                                                                 os.path.basename(instance.selection[0])),
+                                     ('127.0.0.1', 8000))
+                                     # (i.ip, self.msg_port))
                 reactor.connectTCP(i.ip, self.file_port, FileClientFactory(self))
+                # reactor.connectTCP('127.0.0.1', 8000, FileClientFactory(self))
                 break
         # Send Request
-        print('Send file {} to {}'.format(instance.selection, client_name))
+
 
         # print instance.selection
 
@@ -539,7 +572,7 @@ class KitchenSink(App):
             self.login(username, password)
             self.userid = username
         else:
-            self.show_error_dialog('login')
+            self.show_dialog('login')
 
     # connection_wrapper
     def comm2server(self, dst_host, dst_port):
@@ -571,69 +604,93 @@ class KitchenSink(App):
         self.file_conn = conn
 
     # dialogs
-    def show_error_dialog(self, error_type, userid='', filename=''):
+    def show_dialog(self, dialog_type, userid='', filename=''):
         """
-        :param error_type: offline, login, connection, file_request, refused
+        :param dialog_type: offline, login, connection, file_request, refused, logout, add_friend
         :return: None
         """
-        if error_type == 'offline':
+        if dialog_type == 'offline':
             label_text = 'This friend is currently offline'
             dialog_text = 'Friend is offline'
             # button_text = 'OK'
-        elif error_type == 'login':
+        elif dialog_type == 'login':
             label_text = 'Please Check your username and password'
             dialog_text = 'Wrong username/password!'
             # button_text = 'OK'
-        elif error_type == 'connection':
+        elif dialog_type == 'connection':
             label_text = 'Please Check your Internet Connection'
             dialog_text = 'Connection Failed'
             # button_text = 'OK'
-        elif error_type == 'file_request':
+        elif dialog_type == 'file_request':
             label_text = 'Your Friend {} want to send file {} to you, do you want to accept?'.format(userid, filename)
             dialog_text = 'Sending File Request'
             # button_text = 'OK'
-        elif error_type == 'refused':
+        elif dialog_type == 'refused':
             label_text = 'Your request to send file are refused'
             dialog_text = 'Request Refused'
-            pass
+        elif dialog_type == 'logout':
+            label_text = 'Cannot connect to server, logout failed'
+            dialog_text = 'Logout Error'
+        elif dialog_type == 'add_friend':
+            label_text = ''
+            dialog_text = "Please Input your friend's userid"
         else:
-            raise Exception, 'No such error_type'
-        content = MDLabel(font_style='Body1',
-                          theme_text_color='Secondary',
-                          text=label_text,
-                          size_hint_y=None,
-                          valign='top')
-        content.bind(texture_size=content.setter('size'))
+            raise Exception, 'No such dialog_type'
+        if dialog_type == 'add_friend':
+            content = MDTextField(id='friend_name',
+                                  hint_text='friend name',
+                                  required=True,
+                                  color_mode='accent',
+                                  helper_text='your friend userid',
+                                  helper_text_mode='on_focus')
+        else:
+            content = MDLabel(font_style='Body1',
+                              theme_text_color='Secondary',
+                              text=label_text,
+                              size_hint_y=None,
+                              valign='top')
+            content.bind(texture_size=content.setter('size'))
         self.error_dialog = MDDialog(title=dialog_text,
                                      content=content,
                                      size_hint=(.8, None),
                                      height=dp(200),
                                      auto_dismiss=False)
         self.error_dialog.add_action_button("OK",
-                                            action=lambda *x: self.error_dialog_dismiss(error_type))
-        if error_type == 'file_request':
+                                            action=lambda *x: self.dialog_dismiss(dialog_type,
+                                                                                        userid,
+                                                                                        filename))
+        if dialog_type == 'file_request':
             self.error_dialog.add_action_button("NO",
-                                                action=lambda *x: self.error_dialog_dismiss('file_request_ok',
-                                                                                            userid,
-                                                                                            filename))
+                                                action=lambda *x: self.dialog_dismiss('{}_no'.format(dialog_type)))
+        if dialog_type == 'add_friend':
+            self.error_dialog.add_action_button("Cancel",
+                                                action=lambda *x: self.dialog_dismiss('{}_cancel'.format(dialog_type)))
         self.error_dialog.open()
 
-    def error_dialog_dismiss(self, error_type, userid='', filename=''):
-        if error_type == 'login':
+    def dialog_dismiss(self, dialog_type, userid='', filename=''):
+        if dialog_type == 'login':
             self.root.ids.username.text = ''
             self.root.ids.password.text = ''
-        elif error_type == 'connection':
+        elif dialog_type == 'connection':
             self.comm2server(self.host, self.server_port)
             self.comm2friendlist(self.host, self.server_port)
             reactor.listenUDP(self.msg_port, ChatClient(self))
             # reactor.listenTCP(self.listen_port, RequestServerFactory(self))
-        elif error_type == 'file_request_ok':
+        elif dialog_type == 'file_request':
             # Send ACK to friend, in format
             self.filerecv_flag.append([userid, filename])
+            print('OK to send file, userid is: {}'.format(userid))
             for i in self.friend_list:
                 if i.name == userid and i.is_online:
-                    self.chat_conn.write('FILE_{}_ACK'.format(self.userid), (i.ip, self.msg_port))
+                    # self.chat_conn.write('FILE_{}_ACK'.format(self.userid), (i.ip, self.msg_port))
+                    self.chat_conn.write('FILE_{}_ACK'.format(self.userid), ('127.0.0.1', 8000))
                     break
+        elif dialog_type == 'add_friend':
+            if self.root.ids.friend_name.text is None:
+                return
+            else:
+                with open(friend_list_fn, 'a') as f:
+                    f.write(self.root.ids.friend_name.text)
         self.error_dialog.dismiss()
 
     def get_time_picker_data(self, instance, time):
