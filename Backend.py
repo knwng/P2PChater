@@ -171,17 +171,19 @@ class ChatClient(protocol.DatagramProtocol):
                         idx = [x[0] for x in self.app.filesend_flag].index(userid)
                         filepath = self.app.filesend_flag[idx][1]
                         self.app.filesend_flag.remove(self.app.filesend_flag[idx])
-                        for i in self.app.friend_list:
+                        for idx, i in enumerate(self.app.friend_list):
                             if userid == i.name and i.is_online:
-                                with open(filepath, 'rb') as f:
+                                print('filepath: {}'.format(filepath))
+                                with open(filepath[0], 'rb') as f:
                                     filedata = f.read()
                                     if self.app.file_conn:
                                         self.app.file_conn.write('FILE_{}_{}'.format(userid, filedata))
+                                        self.app.friend_list[idx].msg.append([time.time(), 1, os.path.basename(filepath)])
+                                        break
                                     else:
                                         print('file conn are lost')
                             else:
                                 print('userid {} is wrong or is not online'.format(userid))
-                            break
                     else:
                         print('{} are not in file send queue'.format(userid))
                     pass
