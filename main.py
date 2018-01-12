@@ -286,6 +286,18 @@ class KitchenSink(App):
     # [1] for filepath
     filesend_flag = []
     pwd = ''
+    friend_list_fn = ''
+
+    # parameters for test
+    test_listen_port1 = 8000
+    test_write_port1 = 8100
+    test_listen_port2 = 8100
+    test_write_port2 = 8000
+    test_file_listen_port1 = 8200
+    test_file_listen_port2 = 8300
+    test_file_write_port1 = 8300
+    test_file_write_port2 = 8200
+    test_agent = 2  # in [1, 2]
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
@@ -316,8 +328,15 @@ class KitchenSink(App):
 
         self.comm2server(self.host, self.server_port)
         self.comm2friendlist(self.host, self.server_port)
-        reactor.listenUDP(self.msg_port, ChatClient(self))
-        reactor.listenTCP(self.file_port, FileServerFactory(self))
+        # reactor.listenUDP(self.msg_port, ChatClient(self))
+        # print("Listening socket: {}".format(self.msg_port))
+        if self.test_agent == 1:
+            reactor.listenUDP(self.test_listen_port1, ChatClient(self))
+            reactor.listenTCP(self.test_file_listen_port1, FileServerFactory(self))
+        else:
+            reactor.listenUDP(self.test_listen_port2, ChatClient(self))
+            reactor.listenTCP(self.test_file_listen_port2, FileServerFactory(self))
+        # reactor.listenTCP(self.file_port, FileServerFactory(self))
         # self.widget_shape = [main_widget.width, main_widget.height]
         return main_widget
 
@@ -340,6 +359,7 @@ class KitchenSink(App):
             self.get_friendlist()
             Clock.schedule_interval(self.get_friendlist, 1)
             # Clock.schedule_interval(self.update_chat_window, 0.5)
+            print("Current login account: {}".format(self.userid))
         else:
             self.show_dialog('connection')
 
@@ -353,6 +373,9 @@ class KitchenSink(App):
             self.root.ids.password.text = ''
             self.login_status = False
             self.root.ids.scr_mngr.current = 'login'
+            self.userid = ''
+            self.friend_list_fn = ''
+
         else:
             self.show_dialog('logout')
 
@@ -362,14 +385,20 @@ class KitchenSink(App):
 
     def get_friendlist(self, *args):
         if self.friend_list is None:
-            with file(friend_list_fn, 'r') as f:
+            if not os.path.exists(os.path.join('./user', self.userid)):
+                os.system('mkdir -p {}'.format(os.path.join('./user', self.userid)))
+            if not os.path.exists(os.path.join('./user', self.userid, 'friend_list')):
+                os.system('touch {}'.format(os.path.join('./user', self.userid, 'friend_list')))
+            self.friend_list_fn = os.path.join('./user', self.userid, 'friend_list')
+            with file(self.friend_list_fn, 'r') as f:
                 flt = f.readlines()
             flt = [x[0:-1] for x in flt if re.match(pattern_id, x) is not None]
             self.friend_list = []
             for i in flt:
                 self.friend_list.append(Friends(name=i))
         self.curr_proc_friend = 0
-        self.friendlist_conn.write('q{}'.format(self.friend_list[0].name))
+        if len(self.friend_list) > 0:
+            self.friendlist_conn.write('q{}'.format(self.friend_list[0].name))
 
     def query_friend(self, id):
         self.friendlist_conn.write(id.encode('utf-8'))
@@ -513,7 +542,11 @@ class KitchenSink(App):
                 # print('Friend list before sending: {}'.format([x.display() for x in self.friend_list]))
                 if self.chat_conn is not None:
                     # self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), (i.ip, self.msg_port))
-                    self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', 8000))
+                    # self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', 8000))
+                    if self.test_agent == 1:
+                        self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', self.test_write_port1))
+                    else:
+                        self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', self.test_write_port2))
                     self.root.ids.chatroom_input.text = ''
                     if self.root.ids.scr_mngr.current == 'chatroom':
                         self.show_chat_window(idx)
@@ -547,14 +580,20 @@ class KitchenSink(App):
         self.root.ids.scr_mngr.current = 'chatroom'
         self.filesend_flag.append([client_name, instance.selection])
         for idx, i in enumerate(self.friend_list):
+            i.display()
             if i.name == client_name and i.is_online:
-                self.chat_conn.write('FILE_{}_REQUEST_{}'.format(client_name,
+                self.chat_conn.write('FILE_{}_REQUEST_{}'.format(self.userid,
                                                                  os.path.basename(instance.selection[0])),
-                                     ('127.0.0.1', 8000))
+                                     ('127.0.0.1', self.test_write_port1 if self.test_agent == 1 else self.test_write_port2))
+                                     # ('127.0.0.1', self.test_write_port2))
                                      # (i.ip, self.msg_port))
-                reactor.connectTCP(i.ip, self.file_port, FileClientFactory(self))
-                # reactor.connectTCP('127.0.0.1', 8000, FileClientFactory(self))
+                if self.test_agent == 1:
+                    reactor.connectTCP(i.ip, self.test_file_write_port1, FileClientFactory(self))
+                else:
+                    reactor.connectTCP(i.ip, self.test_file_write_port2, FileClientFactory(self))
+                # reactor.connectTCP(i.ip, self.file_port, FileClientFactory(self))
                 break
+        # print("Friend {} are not online".format(client_name))
         # Send Request
 
 
@@ -568,9 +607,10 @@ class KitchenSink(App):
         # print('Password: {}'.format(password))
         # for i in self.root.ids:
         #     print('Current Widget: {}'.format(i))
-        if username == '2014010622' and password == 'net2017':
-            self.login(username, password)
-            self.userid = username
+        if password == 'net2017':
+            if re.match(pattern_id, username):
+                self.userid = username
+                self.login(username, password)
         else:
             self.show_dialog('login')
 
@@ -679,17 +719,22 @@ class KitchenSink(App):
         elif dialog_type == 'file_request':
             # Send ACK to friend, in format
             self.filerecv_flag.append([userid, filename])
-            print('OK to send file, userid is: {}'.format(userid))
+            print('Agree to receive file from {}'.format(userid))
             for i in self.friend_list:
+                i.display()
                 if i.name == userid and i.is_online:
                     # self.chat_conn.write('FILE_{}_ACK'.format(self.userid), (i.ip, self.msg_port))
-                    self.chat_conn.write('FILE_{}_ACK'.format(self.userid), ('127.0.0.1', 8000))
+                    print('Send {}'.format('FILE_{}_ACK'.format(self.userid)))
+                    if self.test_agent == 1:
+                        self.chat_conn.write('FILE_{}_ACK'.format(self.userid), ('127.0.0.1', self.test_write_port1))
+                    else:
+                        self.chat_conn.write('FILE_{}_ACK'.format(self.userid), ('127.0.0.1', self.test_write_port2))
                     break
         elif dialog_type == 'add_friend':
             if self.root.ids.friend_name.text is None:
                 return
             else:
-                with open(friend_list_fn, 'a') as f:
+                with open(self.friend_list_fn, 'a') as f:
                     f.write(self.root.ids.friend_name.text)
         self.error_dialog.dismiss()
 

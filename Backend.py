@@ -26,7 +26,7 @@ class LoginClient(protocol.Protocol):
 
     def dataReceived(self, data):
         # self.factory.app.on_message(data)
-        # print('Received data: {}'.format(data))
+        print('Received data from LoginClient: {}'.format(data))
         if self.factory.app.login_status is False:
             if data == 'lol':
                 self.factory.app.login_callback(True)
@@ -84,15 +84,16 @@ class FileServer(protocol.Protocol):
     def dataReceived(self, data):
         # self.factory.app.handle_chat_request(data)
         # in format FILE_userid_data
+        print('File Server received data: [{}]'.format(type(data)))
         if data.startswith('FILE'):
             userid = data.split('_')[1]
             if re.match(pattern_id, userid) is not None:
-                if userid in [x for x in self.factory.app.filerecv_flag]:
-                    idx = [x for x in self.factory.app.filerecv_flag].index(userid)
+                if userid in [x[0] for x in self.factory.app.filerecv_flag]:
+                    idx = [x[0] for x in self.factory.app.filerecv_flag].index(userid)
                     filename = self.factory.app.filerecv_flag[idx]
-                    if os.path.exists(os.path.join(self.factory.app.pwd, userid)) is None:
-                        os.system('mkdir -p {}'.format(os.path.join(self.factory.app.pwd, userid)))
-                    with open(os.path.join(self.factory.app.pwd, userid, filename), 'wb') as f:
+                    if os.path.exists(os.path.join('./user', userid)) is None:
+                        os.system('mkdir -p {}'.format(os.path.join('./user', userid)))
+                    with open(os.path.join('./user', userid, filename), 'wb') as f:
                         f.write(data[16:])
                 else:
                     print('{} is not in friend list'.format(userid))
@@ -131,7 +132,7 @@ class ChatClient(protocol.DatagramProtocol):
 
     def __init__(self, app):
         # super(EchoClient, self).__init__()
-        print('app instance {}'.format(app))
+        # print('app instance {}'.format(app))
         self.app = app
 
     def startProtocol(self):
@@ -167,25 +168,28 @@ class ChatClient(protocol.DatagramProtocol):
                     # ACK to receive file, start transfer
                     # send file in format FILE_userid_data
                     # filesend_flag: [userid, filepath]
+                    print('File Sending Queue: [{}]'.format(self.app.filesend_flag))
                     if userid in [x[0] for x in self.app.filesend_flag]:
                         idx = [x[0] for x in self.app.filesend_flag].index(userid)
                         filepath = self.app.filesend_flag[idx][1]
                         self.app.filesend_flag.remove(self.app.filesend_flag[idx])
                         for idx, i in enumerate(self.app.friend_list):
                             if userid == i.name and i.is_online:
+                                i.display()
                                 print('filepath: {}'.format(filepath))
                                 with open(filepath[0], 'rb') as f:
                                     filedata = f.read()
                                     if self.app.file_conn:
+                                        # print('File Connection setup, begin to send file: [{}]'.format('FILE_{}_{}'.format(userid, filedata)))
                                         self.app.file_conn.write('FILE_{}_{}'.format(userid, filedata))
-                                        self.app.friend_list[idx].msg.append([time.time(), 1, os.path.basename(filepath)])
+                                        self.app.friend_list[idx].msg.append([time.time(), 1, os.path.basename(filepath[0])])
                                         break
                                     else:
                                         print('file conn are lost')
                             else:
                                 print('userid {} is wrong or is not online'.format(userid))
                     else:
-                        print('{} are not in file send queue'.format(userid))
+                        print('{} are not in file sending queue'.format(userid))
                     pass
                 elif data.split('_')[2] == 'REFUSE':
                     # your sending request are refused
@@ -199,6 +203,7 @@ class ChatClient(protocol.DatagramProtocol):
 
 
 class RequestServer(protocol.Protocol):
+    
     def dataReceived(self, data):
         self.factory.app.handle_chat_request(data)
         # if response:
@@ -363,19 +368,7 @@ class CommP2PWidget(Widget):
         self.src_port = self.client_sock.getsockname()[1]
         self.client_sock.connect(self.address)
         self.client_sock.setblocking(False)
-        # msg in format (timestamps, msg, flag)
-        # flag = 1 for user himself, 2 for his friend
         self.msg = []
-
-    # def send_msg(self, data):
-    #     self.msg.append([ctime(), data, 1])
-    #     self.client_sock.sendall(data)
-    #     return
-    #
-    # def recv_msg(self):
-    #     data = self.sock.recv(BUFFERSIZE)
-    #     self.msg.append(list(data).append(2))
-    #     return
 
     def send_file(self, filename):
         pass
@@ -446,7 +439,7 @@ class Comm2Server(object):
         return reply
 
     def get_friend_status(self):
-        with file(friend_list_fn, 'r') as f:
+        with file(self.friend_list_fn, 'r') as f:
             flt = f.readlines()
         for i in flt:
             self.friend_list.append(Friends(i, self.query(i)))
