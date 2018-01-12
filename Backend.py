@@ -85,22 +85,40 @@ class FileServer(protocol.Protocol):
         # self.factory.app.handle_chat_request(data)
         # in format FILE_userid_data
         print('File Server received data: [{}]'.format(type(data)))
-        if data.startswith('FILE'):
-            userid = data.split('_')[1]
-            if re.match(pattern_id, userid) is not None:
-                if userid in [x[0] for x in self.factory.app.filerecv_flag]:
-                    idx = [x[0] for x in self.factory.app.filerecv_flag].index(userid)
-                    filename = self.factory.app.filerecv_flag[idx]
-                    if os.path.exists(os.path.join('./user', userid)) is None:
-                        os.system('mkdir -p {}'.format(os.path.join('./user', userid)))
-                    with open(os.path.join('./user', userid, filename), 'wb') as f:
-                        f.write(data[16:])
+        if len(self.factory.filebuffer) == 0:
+            if data.startswith('FILE'):
+                userid = data.split('_')[1]
+                if re.match(pattern_id, userid) is not None:
+                    self.factory.sending_id = userid
+                    self.factory.filebuffer += data[16:]
                 else:
-                    print('{} is not in friend list'.format(userid))
+                    print("Got the head of file but userid {} is wrong".format(userid))
             else:
-                print('{} is illegal'.format(userid))
+                print('The message is not startwith FILE')
         else:
-            print('data are not start with FILE')
+            eof_idx = data.find('FILEEND')
+            if eof_idx > 0:
+                self.factory.filebuffer += data[:eof_idx]
+                print('File receiving queue: {}'.format(self.factory.app.filerecv_flag))
+                if self.factory.sending_id in [x[0] for x in self.factory.app.filerecv_flag]:
+                    idx = [x[0] for x in self.factory.app.filerecv_flag].index(self.factory.sending_id)
+                    filename = self.factory.app.filerecv_flag[idx][1]
+                    if os.path.exists(os.path.join('./user', self.factory.sending_id)) is None:
+                        os.system('mkdir -p {}'.format(os.path.join('./user', self.factory.sending_id)))
+                    with open(os.path.join('./user', self.factory.sending_id, filename), 'wb') as f:
+                        f.write(self.factory.filebuffer)
+                else:
+                    print('{} is not in friend list'.format(self.factory.sending_id))
+                print('Finish transfer, delete buffer')
+                self.factory.sending_id = ''
+                self.factory.filebuffer = ''
+            else:
+                print('Not found EOF, still transfering')
+                self.factory.filebuffer += data
+                if data.startswith('FILE'):
+                    print('Find another file while transfering, transfer crashed, delete buffer')
+                    self.factory.sending_id = ''
+                    self.factory.filebuffer = ''
 
 
 class FileServerFactory(protocol.Factory):
@@ -108,6 +126,8 @@ class FileServerFactory(protocol.Factory):
 
     def __init__(self, app):
         self.app = app
+        self.sending_id = ''
+        self.filebuffer = ''
 
 
 class FileClient(protocol.Protocol):
@@ -181,7 +201,7 @@ class ChatClient(protocol.DatagramProtocol):
                                     filedata = f.read()
                                     if self.app.file_conn:
                                         # print('File Connection setup, begin to send file: [{}]'.format('FILE_{}_{}'.format(userid, filedata)))
-                                        self.app.file_conn.write('FILE_{}_{}'.format(userid, filedata))
+                                        self.app.file_conn.write('FILE_{}_{}_FILEEND'.format(self.app.userid, filedata))
                                         self.app.friend_list[idx].msg.append([time.time(), 1, os.path.basename(filepath[0])])
                                         break
                                     else:
@@ -203,7 +223,7 @@ class ChatClient(protocol.DatagramProtocol):
 
 
 class RequestServer(protocol.Protocol):
-    
+
     def dataReceived(self, data):
         self.factory.app.handle_chat_request(data)
         # if response:

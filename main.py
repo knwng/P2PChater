@@ -297,7 +297,7 @@ class KitchenSink(App):
     test_file_listen_port2 = 8300
     test_file_write_port1 = 8300
     test_file_write_port2 = 8200
-    test_agent = 2  # in [1, 2]
+    test_agent = 10  # in [1, 2]
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
