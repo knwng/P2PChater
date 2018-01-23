@@ -2,22 +2,17 @@
 from Backend import *
 from config import *
 from ui import *
-import time
 import os, sys, time
-from os.path import sep, expanduser, isdir, dirname
+from os.path import sep, expanduser, dirname
 from numpy import argsort
 
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.metrics import dp
 from kivy.properties import ObjectProperty, StringProperty
-from kivy.uix.screenmanager import Screen
-from kivy.uix.widget import Widget
 from kivy.utils import get_color_from_hex
-from kivy.uix.boxlayout import BoxLayout
 
 from kivymd.bottomsheet import MDListBottomSheet, MDGridBottomSheet
-from kivymd.card import MDCard, MDSeparator
 from kivymd.date_picker import MDDatePicker
 from kivymd.dialog import MDDialog
 from kivymd.label import MDLabel
@@ -26,11 +21,9 @@ from kivymd.material_resources import DEVICE_TYPE
 from kivymd.snackbar import Snackbar
 from kivymd.theming import ThemeManager
 from kivymd.time_picker import MDTimePicker
-from kivymd.toolbar import Toolbar
 from kivymd.color_definitions import colors
 from kivymd.textfields import MDTextField
 from garden.filebrowser import FileBrowser
-from garden.qrcode import QRCodeWidget
 
 
 main_widget_kv = '''
@@ -260,7 +253,7 @@ BoxLayout:
 '''
 
 
-class KitchenSink(App):
+class IRC(App):
     userid = ''
     error_dialog = None
     theme_cls = ThemeManager()
@@ -297,7 +290,7 @@ class KitchenSink(App):
     test_file_listen_port2 = 8300
     test_file_write_port1 = 8300
     test_file_write_port2 = 8200
-    test_agent = 10  # in [1, 2]
+    test_agent = 2  # in [1, 2]
 
     menu_items = [
         {'viewclass': 'MDMenuItem',
@@ -318,26 +311,16 @@ class KitchenSink(App):
 
     def build(self):
         main_widget = Builder.load_string(main_widget_kv)
-        # self.theme_cls.theme_style = 'Dark'
-
-        # main_widget.ids.text_field_error.bind(
-        #     on_text_validate=self.set_error_message,
-        #     on_focus=self.set_error_message)
-
         self.bottom_navigation_remove_mobile(main_widget)
 
         self.comm2server(self.host, self.server_port)
         self.comm2friendlist(self.host, self.server_port)
-        # reactor.listenUDP(self.msg_port, ChatClient(self))
-        # print("Listening socket: {}".format(self.msg_port))
         if self.test_agent == 1:
             reactor.listenUDP(self.test_listen_port1, ChatClient(self))
             reactor.listenTCP(self.test_file_listen_port1, FileServerFactory(self))
         else:
             reactor.listenUDP(self.test_listen_port2, ChatClient(self))
             reactor.listenTCP(self.test_file_listen_port2, FileServerFactory(self))
-        # reactor.listenTCP(self.file_port, FileServerFactory(self))
-        # self.widget_shape = [main_widget.width, main_widget.height]
         return main_widget
 
     # Network
@@ -351,14 +334,11 @@ class KitchenSink(App):
 
     def login_callback(self, FLAG):
         if FLAG:
-            # self.login_conn.loseConnection()
-            # del self.login_conn
             self.login_status = True
             self.root.ids.qr.data = self.userid
             self.root.ids.scr_mngr.current = 'mainpage'
             self.get_friendlist()
             Clock.schedule_interval(self.get_friendlist, 1)
-            # Clock.schedule_interval(self.update_chat_window, 0.5)
             print("Current login account: {}".format(self.userid))
         else:
             self.show_dialog('connection')
@@ -445,17 +425,13 @@ class KitchenSink(App):
                                              theme_text_color='Custom',
                                              text_color=get_color_from_hex(colors['Amber']['700']),
                                              on_release=self.chatwith)
-                # iconwidget = IconLeftSampleWidget(icon='account', id='icon_{}'.format(i.name))
                 iconwidget = IconLeftSampleWidget(icon='account')
-                # listwidget.add_widget(iconwidget)
                 self.root.ids.ml.add_widget(listwidget)
             else:
                 listwidget = OneLineListItem(text=i.name,
                                              theme_text_color='Custom',
                                              on_release=self.chatwith)
-                # iconwidget = IconLeftSampleWidget(icon='account-off', id='icon_{}'.format(i.name))
                 iconwidget = IconLeftSampleWidget(icon='account-off')
-                # listwidget.add_widget(iconwidget)
                 self.root.ids.ml.add_widget(listwidget)
         return
 
@@ -466,28 +442,21 @@ class KitchenSink(App):
                 if self.friend_list[i].is_online is False:
                     self.show_dialog('offline')
                     return
-                # elif self.friend_list[i].is_use is False:
-                #     self.friend_list[i].is_use = True
-                    # self.curr_generate_client = i
-                    # self.comm2chat(self.host, self.listen_port, i)
                 self.show_chat_window(i)
                 return
 
     def show_chat_window(self, idx):
-        # print('Friend list: {}'.format([x.display() for x in self.friend_list]))
         self.root.ids.chatroom_toolbar.title = 'Chat With {}'.format(self.friend_list[idx].name)
         self.root.ids.chatroom_msg.clear_widgets()
         # sort msg by timestamp
         print('MSG from {}: {}'.format(self.friend_list[idx].name, self.friend_list[idx].msg))
         sorted_idx = argsort([x[0] for x in self.friend_list[idx].msg])
         total_msg = len(self.friend_list[idx].msg)
-        # print('Sorted order: {} || total: {}'.format(sorted_idx, total_msg))
         num = 0
         # parent_shape in [width, height]
         parent_shape = [self.root.ids.scr_mngr.width, 100+100*total_msg]
         print('parent shape: {}'.format(parent_shape))
         self.root.ids.chatroom_msg.height = parent_shape[1]
-        # self.root.ids.chatroom_msg.width = dp(round(parent_shape[0] * 0.8))
         for i in sorted_idx:
             if self.friend_list[idx].msg[i][1] == 0:
                 # income message
@@ -496,7 +465,6 @@ class KitchenSink(App):
                                                                   self.friend_list[idx].msg[i][2],
                                                                   num,
                                                                   parent_shape).get_card())
-                # self.left_card(self.friend_list[idx].name, self.friend_list[idx].msg[i][2])
             else:
                 # output message
                 self.root.ids.chatroom_msg.add_widget(MessageCard('right',
@@ -504,30 +472,9 @@ class KitchenSink(App):
                                                                   self.friend_list[idx].msg[i][2],
                                                                   num,
                                                                   parent_shape).get_card())
-                # self.right_card(self.friend_list[idx].name, self.friend_list[idx].msg[i][2])
             num += 1
         self.root.ids.scr_mngr.current = 'chatroom'
         return
-
-    # def left_card(self, title, body):
-    #     widget = MessageCard().get_card()
-    #     print('ids: {}'.format(widget.ids))
-    #     widget.ids['msgcard_main'].pos_hint = {'left': 0}
-    #     widget.ids['msgcard_main'].md_bg_color = get_color_from_hex(colors['Blue']['200'])
-    #     widget.ids['msgcard_title'].text = title
-    #     widget.ids['msgcard_body'].text = body
-    #     self.root.ids.chatroom_msg.add_widget(widget)
-    #     pass
-    #
-    # def right_card(self, title, body):
-    #     widget = MessageCard().get_card()
-    #     print('ids: {}'.format(widget.ids))
-    #     widget.ids['msgcard_main'].pos_hint = {'right': 1}
-    #     widget.ids['msgcard_main'].md_bg_color = get_color_from_hex(colors['Green']['200'])
-    #     widget.ids['msgcard_title'].text = title
-    #     widget.ids['msgcard_body'].text = body
-    #     self.root.ids.chatroom_msg.add_widget(widget)
-    #     pass
 
     def send_msg(self):
         if self.root.ids.chatroom_input.text is None:
@@ -537,12 +484,8 @@ class KitchenSink(App):
             if i.name == client_name:
                 msg = self.root.ids.chatroom_input.text
                 # 0 for in-msg, 1 for out-msg
-                # print('IDX to write msg'.format(idx))
                 self.friend_list[idx].msg.append([time.time(), 1, msg])
-                # print('Friend list before sending: {}'.format([x.display() for x in self.friend_list]))
                 if self.chat_conn is not None:
-                    # self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), (i.ip, self.msg_port))
-                    # self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', 8000))
                     if self.test_agent == 1:
                         self.chat_conn.write('{}_{}_{}'.format('MSG', self.userid, msg), ('127.0.0.1', self.test_write_port1))
                     else:
@@ -553,7 +496,6 @@ class KitchenSink(App):
                 else:
                     print('UDP Client Not setup, cannot chat')
                 return
-                # i.chat_client.write(msg)
 
     def send_file(self):
         client_name = self.root.ids.chatroom_toolbar.title.split(' ')[-1]
@@ -585,28 +527,16 @@ class KitchenSink(App):
                 self.chat_conn.write('FILE_{}_REQUEST_{}'.format(self.userid,
                                                                  os.path.basename(instance.selection[0])),
                                      ('127.0.0.1', self.test_write_port1 if self.test_agent == 1 else self.test_write_port2))
-                                     # ('127.0.0.1', self.test_write_port2))
-                                     # (i.ip, self.msg_port))
                 if self.test_agent == 1:
                     reactor.connectTCP(i.ip, self.test_file_write_port1, FileClientFactory(self))
                 else:
                     reactor.connectTCP(i.ip, self.test_file_write_port2, FileClientFactory(self))
-                # reactor.connectTCP(i.ip, self.file_port, FileClientFactory(self))
                 break
-        # print("Friend {} are not online".format(client_name))
         # Send Request
-
-
-        # print instance.selection
-
 
     def get_username_passwd(self):
         username = self.root.ids.username.text
         password = self.root.ids.password.text
-        # print('Username: {}'.format(username))
-        # print('Password: {}'.format(password))
-        # for i in self.root.ids:
-        #     print('Current Widget: {}'.format(i))
         if password == 'net2017':
             if re.match(pattern_id, username):
                 self.userid = username
@@ -623,19 +553,12 @@ class KitchenSink(App):
         reactor.connectTCP(dst_host, dst_port, FriendlistClientFactory(self))
         return
 
-    # def comm2chat(self, dst_host, dst_port, idx):
-    #     reactor.connectTCP(dst_host, dst_port, ChatClientFactory(self, idx))
-    #     return
-
     # connection handle
     def on_login_conn(self, conn):
         self.login_conn = conn
 
     def on_friendlist_conn(self, conn):
         self.friendlist_conn = conn
-
-    # def on_chatclient_conn(self, conn, idx):
-    #     self.friend_list[idx].chat_client = conn
 
     def on_chatclient_connection(self, conn):
         self.chat_conn = conn
@@ -652,19 +575,15 @@ class KitchenSink(App):
         if dialog_type == 'offline':
             label_text = 'This friend is currently offline'
             dialog_text = 'Friend is offline'
-            # button_text = 'OK'
         elif dialog_type == 'login':
             label_text = 'Please Check your username and password'
             dialog_text = 'Wrong username/password!'
-            # button_text = 'OK'
         elif dialog_type == 'connection':
             label_text = 'Please Check your Internet Connection'
             dialog_text = 'Connection Failed'
-            # button_text = 'OK'
         elif dialog_type == 'file_request':
             label_text = 'Your Friend {} want to send file {} to you, do you want to accept?'.format(userid, filename)
             dialog_text = 'Sending File Request'
-            # button_text = 'OK'
         elif dialog_type == 'refused':
             label_text = 'Your request to send file are refused'
             dialog_text = 'Request Refused'
@@ -715,7 +634,6 @@ class KitchenSink(App):
             self.comm2server(self.host, self.server_port)
             self.comm2friendlist(self.host, self.server_port)
             reactor.listenUDP(self.msg_port, ChatClient(self))
-            # reactor.listenTCP(self.listen_port, RequestServerFactory(self))
         elif dialog_type == 'file_request':
             # Send ACK to friend, in format
             self.filerecv_flag.append([userid, filename])
@@ -723,7 +641,6 @@ class KitchenSink(App):
             for i in self.friend_list:
                 i.display()
                 if i.name == userid and i.is_online:
-                    # self.chat_conn.write('FILE_{}_ACK'.format(self.userid), (i.ip, self.msg_port))
                     print('Send {}'.format('FILE_{}_ACK'.format(self.userid)))
                     if self.test_agent == 1:
                         self.chat_conn.write('FILE_{}_ACK'.format(self.userid), ('127.0.0.1', self.test_write_port1))
@@ -804,16 +721,6 @@ class KitchenSink(App):
         elif snack_type == 'verylong':
             Snackbar(text="This is a very very very very very very very long snackbar!").show()
 
-    '''
-    def set_error_message(self, *args):
-        if len(self.root.ids.text_field_error.text) == 2:
-            self.root.ids.text_field_error.error = True
-        else:
-            self.root.ids.text_field_error.error = False
-    '''
-
-
-
     def on_pause(self):
         return True
 
@@ -822,4 +729,4 @@ class KitchenSink(App):
 
 
 if __name__ == '__main__':
-    KitchenSink().run()
+    IRC().run()
